@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>The Art Nest | Handmade with Heart</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Crimson+Pro:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>"/>
+  <meta name="description" content="The Art Nest — Unique handmade art, resin, paintings, knitting & embroidery by Aayushi Tiwari. Shop handcrafted pieces made with love."/>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, collection, addDoc, getDocs, updateDoc, deleteDoc, query, orderBy, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBIAfgS0kmNMnBygI6F87R-H_nireIwuzA",
+      authDomain: "the-art-nest.firebaseapp.com",
+      projectId: "the-art-nest",
+      storageBucket: "the-art-nest.firebasestorage.app",
+      messagingSenderId: "448940615552",
+      appId: "1:448940615552:web:0bd1c14cf6a6ebc2720365"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // Expose to global scope
+    window._fb = { auth, db, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential, doc, setDoc, getDoc, collection, addDoc, getDocs, updateDoc, deleteDoc, query, orderBy, where, serverTimestamp };
+
+    // Auth state listener
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // Get user profile from Firestore
+        try {
+          const snap = await getDoc(doc(db, 'customers', user.uid));
+          if (snap.exists()) {
+            const data = snap.data();
+            window._currentFBUser = { uid: user.uid, ...data };
+            // Check if admin
+            if (data.role === 'admin') {
+              window._isAdmin = true;
+            }
+          } else {
+            window._currentFBUser = { uid: user.uid, email: user.email, name: user.email };
+          }
+        } catch(e) {
+          window._currentFBUser = { uid: user.uid, email: user.email, name: user.email };
+        }
+        updateNavUser();
+        renderShop();
+        if (window._isAdmin) {
+          document.getElementById('admin-panel').style.display = 'block';
+          document.getElementById('fab-admin').textContent = '🛒 Dashboard';
+          renderAdminOrders(); renderAdminMessages(); renderAdminList(); renderAdminCustomers(); renderAdminOffers();
+        }
+      } else {
+        window._currentFBUser = null;
+        window._isAdmin = false;
+        updateNavUser();
+        renderShop();
+      }
+    });
+
+    window._fbReady = true;
+  </script>
+  <style>
+    :root{--cream:#f5efe4;--warm-white:#fdf8f0;--earth:#8b6914;--dark-earth:#5c4a1e;--clay:#c4845a;--sage:#7a8c6e;--moss:#4a5c3e;--charcoal:#2c2416;--light-sage:#d4dbc8;--sand:#ddc9a0;}
+    *{margin:0;padding:0;box-sizing:border-box;}
+    html{scroll-behavior:smooth;}
+    body{background:var(--warm-white);color:var(--charcoal);font-family:'Crimson Pro',serif;overflow-x:hidden;}
+    body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:1000;opacity:0.5;}
+    nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(245,239,228,0.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--sand);padding:14px 40px;display:flex;justify-content:space-between;align-items:center;gap:12px;}
+    .nav-logo{font-family:'Playfair Display',serif;font-size:1.4rem;font-style:italic;color:var(--dark-earth);}
+    .nav-links{display:flex;gap:24px;list-style:none;}
+    .nav-links a{text-decoration:none;color:var(--charcoal);font-size:1rem;transition:color 0.3s;}
+    .nav-links a:hover{color:var(--clay);}
+    .nav-right{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+    .btn-primary{background:var(--dark-earth);color:var(--cream);border:none;padding:11px 24px;font-family:'Crimson Pro',serif;font-size:1rem;cursor:pointer;border-radius:4px;transition:all 0.3s;text-decoration:none;display:inline-block;}
+    .btn-primary:hover{background:var(--clay);transform:translateY(-2px);box-shadow:0 8px 24px rgba(92,74,30,0.25);}
+    .btn-secondary{background:transparent;color:var(--dark-earth);border:1.5px solid var(--dark-earth);padding:11px 24px;font-family:'Crimson Pro',serif;font-size:1rem;cursor:pointer;border-radius:4px;transition:all 0.3s;text-decoration:none;display:inline-block;}
+    .btn-secondary:hover{background:var(--dark-earth);color:var(--cream);}
+    .btn-outline-clay{background:transparent;color:var(--clay);border:1.5px solid var(--clay);padding:8px 18px;font-family:'Crimson Pro',serif;font-size:0.9rem;cursor:pointer;border-radius:4px;transition:all 0.3s;}
+    .btn-outline-clay:hover{background:var(--clay);color:white;}
+    .btn-danger{background:#c0392b;color:white;border:none;padding:8px 16px;border-radius:4px;font-family:'Crimson Pro',serif;cursor:pointer;font-size:0.9rem;}
+    #nav-user-btn{background:var(--light-sage);color:var(--moss);border:none;padding:9px 16px;border-radius:50px;font-family:'Crimson Pro',serif;font-size:0.88rem;cursor:pointer;transition:all 0.3s;white-space:nowrap;}
+    #nav-user-btn:hover{background:var(--sage);color:white;}
+    .hero{min-height:100vh;display:flex;align-items:center;padding:120px 40px 80px;position:relative;overflow:hidden;background:linear-gradient(135deg,var(--cream) 0%,var(--warm-white) 60%,var(--light-sage) 100%);}
+    .hero-circle{position:absolute;border-radius:50%;opacity:0.12;}
+    .hero-circle-1{width:600px;height:600px;background:var(--clay);top:-200px;right:-100px;}
+    .hero-circle-2{width:300px;height:300px;background:var(--sage);bottom:-100px;left:100px;}
+    .hero-content{max-width:600px;animation:fadeUp 1s ease both;}
+    .hero-tag{display:inline-block;background:var(--light-sage);color:var(--moss);font-size:0.8rem;letter-spacing:0.15em;text-transform:uppercase;padding:6px 16px;border-radius:20px;margin-bottom:24px;}
+    .hero h1{font-family:'Playfair Display',serif;font-size:clamp(2.8rem,6vw,5rem);line-height:1.1;color:var(--dark-earth);margin-bottom:24px;}
+    .hero h1 em{font-style:italic;color:var(--clay);}
+    .hero p{font-size:1.2rem;line-height:1.8;color:#5a4a30;max-width:480px;margin-bottom:40px;}
+    .hero-btns{display:flex;gap:16px;flex-wrap:wrap;}
+    .hero-decoration{position:absolute;right:80px;top:50%;transform:translateY(-50%);width:380px;height:380px;border-radius:60% 40% 70% 30%/50% 60% 40% 50%;background:linear-gradient(135deg,var(--sand),var(--clay));opacity:0.18;animation:morphBlob 8s ease-in-out infinite;}
+    @keyframes morphBlob{0%,100%{border-radius:60% 40% 70% 30%/50% 60% 40% 50%;}50%{border-radius:40% 60% 30% 70%/60% 40% 50% 50%;}}
+    section{padding:80px 40px;}
+    .section-label{font-size:0.75rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;}
+    .section-title{font-family:'Playfair Display',serif;font-size:clamp(1.8rem,3vw,2.8rem);color:var(--dark-earth);margin-bottom:48px;}
+    .categories{background:var(--cream);}
+    .categories-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:20px;}
+    .category-card{background:var(--warm-white);border:1px solid var(--sand);border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:all 0.3s;animation:fadeUp 0.6s ease both;}
+    .category-card:hover{transform:translateY(-6px);box-shadow:0 16px 40px rgba(92,74,30,0.12);border-color:var(--clay);}
+    .category-icon{font-size:2.2rem;margin-bottom:10px;display:block;}
+    .category-card h3{font-family:'Playfair Display',serif;font-size:1rem;color:var(--dark-earth);margin-bottom:4px;}
+    .category-card p{font-size:0.85rem;color:#7a6a50;}
+    .products-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:28px;}
+    .product-card{background:var(--warm-white);border-radius:12px;overflow:hidden;border:1px solid var(--sand);transition:all 0.3s;}
+    .product-card:hover{transform:translateY(-6px);box-shadow:0 20px 48px rgba(92,74,30,0.15);}
+    .product-img{width:100%;height:220px;background:linear-gradient(135deg,var(--sand),var(--light-sage));display:flex;align-items:center;justify-content:center;font-size:3rem;overflow:hidden;}
+    .product-img img{width:100%;height:100%;object-fit:cover;}
+    .product-body{padding:20px;}
+    .product-tag{font-size:0.7rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--clay);margin-bottom:8px;display:block;}
+    .product-body h3{font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--dark-earth);margin-bottom:8px;}
+    .product-body p{font-size:0.95rem;color:#7a6a50;margin-bottom:16px;line-height:1.6;}
+    .product-footer{display:flex;justify-content:space-between;align-items:center;}
+    .product-price{font-family:'Playfair Display',serif;font-size:1.2rem;color:var(--dark-earth);font-weight:700;}
+    .order-btn{background:var(--clay);color:white;border:none;padding:8px 18px;border-radius:4px;font-family:'Crimson Pro',serif;font-size:0.9rem;cursor:pointer;transition:all 0.3s;}
+    .order-btn:hover{background:var(--dark-earth);}
+    .about{background:var(--dark-earth);color:var(--cream);display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;}
+    .about-blob{width:100%;max-width:320px;height:320px;border-radius:60% 40% 50% 70%/50% 70% 30% 60%;background:linear-gradient(135deg,var(--clay),var(--earth));display:flex;align-items:center;justify-content:center;font-size:5rem;margin:0 auto;}
+    .about .section-label{color:var(--light-sage);}
+    .about .section-title{color:var(--cream);margin-bottom:20px;}
+    .about p{font-size:1.05rem;line-height:1.9;color:#d4c4a0;margin-bottom:14px;}
+    .about-stats{display:flex;gap:28px;margin-top:24px;}
+    .stat h4{font-family:'Playfair Display',serif;font-size:1.8rem;color:var(--clay);}
+    .stat p{font-size:0.85rem;color:var(--sand);margin:0;}
+    .contact{background:var(--cream);}
+    .contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:start;}
+    .contact-info h3{font-family:'Playfair Display',serif;font-size:1.4rem;color:var(--dark-earth);margin-bottom:14px;}
+    .contact-info p{font-size:1rem;line-height:1.8;color:#5a4a30;margin-bottom:18px;}
+    .contact-detail{display:flex;align-items:center;gap:12px;margin-bottom:12px;color:#5a4a30;font-size:1rem;}
+    .contact-form{background:var(--warm-white);border:1px solid var(--sand);border-radius:12px;padding:30px;}
+    .form-group{margin-bottom:16px;}
+    .form-group label{display:block;font-size:0.8rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--earth);margin-bottom:6px;}
+    .form-group input,.form-group select,.form-group textarea{width:100%;padding:11px 14px;border:1.5px solid var(--sand);border-radius:6px;background:var(--cream);color:var(--charcoal);font-family:'Crimson Pro',serif;font-size:1rem;outline:none;transition:border-color 0.3s;}
+    .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--clay);}
+    .form-group textarea{height:100px;resize:vertical;}
+    footer{background:var(--charcoal);color:var(--sand);text-align:center;padding:40px;}
+    .footer-logo{font-family:'Playfair Display',serif;font-size:1.5rem;font-style:italic;color:var(--cream);margin-bottom:10px;}
+    footer p{font-size:0.9rem;color:#8a7a60;margin-bottom:14px;}
+    .footer-links{display:flex;justify-content:center;gap:20px;margin-bottom:14px;flex-wrap:wrap;}
+    .footer-links a{color:var(--sand);text-decoration:none;font-size:0.9rem;transition:color 0.3s;}
+    .footer-links a:hover{color:var(--clay);}
+    .social-links{display:flex;justify-content:center;gap:12px;margin-bottom:18px;}
+    .social-link{background:rgba(255,255,255,0.08);color:var(--sand);width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;text-decoration:none;transition:all 0.3s;}
+    .social-link:hover{background:var(--clay);color:white;}
+    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(44,36,22,0.72);z-index:500;align-items:center;justify-content:center;backdrop-filter:blur(4px);padding:16px;}
+    .modal-overlay.open{display:flex;}
+    .modal{background:var(--warm-white);border-radius:16px;padding:32px;width:100%;max-width:480px;position:relative;animation:fadeUp 0.3s ease;max-height:90vh;overflow-y:auto;}
+    .modal-close{position:absolute;top:12px;right:16px;background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--charcoal);}
+    .modal h3{font-family:'Playfair Display',serif;font-size:1.4rem;color:var(--dark-earth);margin-bottom:16px;}
+    .auth-tabs{display:flex;border-bottom:2px solid var(--sand);margin-bottom:22px;}
+    .auth-tab{flex:1;padding:10px;text-align:center;cursor:pointer;font-family:'Crimson Pro',serif;font-size:1rem;color:#7a6a50;border:none;background:none;transition:all 0.3s;}
+    .auth-tab.active{color:var(--dark-earth);border-bottom:2px solid var(--clay);margin-bottom:-2px;}
+    .admin-section{background:var(--cream);border-top:3px solid var(--clay);padding:60px 40px;display:none;}
+    .admin-tabs{display:flex;gap:8px;margin-bottom:28px;flex-wrap:wrap;}
+    .admin-tab-btn{padding:9px 20px;border:1.5px solid var(--sand);border-radius:50px;background:transparent;font-family:'Crimson Pro',serif;font-size:0.9rem;cursor:pointer;transition:all 0.3s;color:var(--charcoal);}
+    .admin-tab-btn.active{background:var(--dark-earth);color:var(--cream);border-color:var(--dark-earth);}
+    .admin-tab-content{display:none;}
+    .admin-tab-content.active{display:block;}
+    .order-card{background:var(--warm-white);border:1px solid var(--sand);border-radius:10px;padding:18px;margin-bottom:12px;}
+    .order-card-header{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
+    .order-status{padding:4px 12px;border-radius:20px;font-size:0.78rem;letter-spacing:0.08em;text-transform:uppercase;}
+    .status-pending{background:#fff3cd;color:#856404;}
+    .status-confirmed{background:#d4edda;color:#155724;}
+    .status-paid{background:#cce5ff;color:#004085;}
+    .status-delivered{background:var(--light-sage);color:var(--moss);}
+    #toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--dark-earth);color:var(--cream);padding:13px 28px;border-radius:50px;font-family:'Crimson Pro',serif;font-size:1rem;z-index:9999;opacity:0;transition:opacity 0.4s;pointer-events:none;white-space:nowrap;max-width:90vw;text-align:center;}
+    #toast.show{opacity:1;}
+    .fab-group{position:fixed;bottom:24px;right:24px;z-index:200;display:flex;flex-direction:column;gap:10px;align-items:flex-end;}
+    .fab{border:none;padding:10px 18px;border-radius:50px;font-family:'Crimson Pro',serif;font-size:0.88rem;cursor:pointer;box-shadow:0 4px 16px rgba(92,74,30,0.28);transition:all 0.3s;}
+    .fab:hover{transform:translateY(-2px);}
+    .fab-admin{background:var(--dark-earth);color:var(--cream);}
+    .fab-user{background:var(--clay);color:white;}
+    /* USER DROPDOWN */
+    .user-dropdown{position:relative;display:inline-block;}
+    .user-dropdown-menu{display:none;position:absolute;right:0;top:calc(100% + 8px);background:var(--warm-white);border:1px solid var(--sand);border-radius:10px;min-width:180px;box-shadow:0 8px 24px rgba(92,74,30,0.15);z-index:200;overflow:hidden;}
+    .user-dropdown-menu.open{display:block;animation:fadeUp 0.2s ease;}
+    .dropdown-item{display:block;width:100%;padding:11px 18px;text-align:left;background:none;border:none;font-family:'Crimson Pro',serif;font-size:0.95rem;color:var(--charcoal);cursor:pointer;transition:background 0.2s;}
+    .dropdown-item:hover{background:var(--cream);}
+    .dropdown-item.danger{color:#c0392b;}
+    .dropdown-divider{height:1px;background:var(--sand);margin:4px 0;}
+
+    /* FILTER BAR */
+    .filter-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:32px;align-items:center;}
+    .filter-btn{padding:8px 18px;border:1.5px solid var(--sand);border-radius:50px;background:transparent;font-family:'Crimson Pro',serif;font-size:0.9rem;cursor:pointer;transition:all 0.3s;color:var(--charcoal);}
+    .filter-btn:hover{border-color:var(--clay);color:var(--clay);}
+    .filter-btn.active{background:var(--dark-earth);color:var(--cream);border-color:var(--dark-earth);}
+    /* SOLD OUT */
+    .sold-out-badge{position:absolute;top:12px;left:12px;background:#c0392b;color:white;font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;padding:4px 10px;border-radius:20px;}
+    .product-card{position:relative;}
+    .sold-out-overlay{position:absolute;inset:0;background:rgba(255,255,255,0.6);display:flex;align-items:center;justify-content:center;border-radius:12px;}
+    /* REVIEWS */
+    .reviews-section{background:var(--cream);}
+    .reviews-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:24px;}
+    .review-card{background:var(--warm-white);border:1px solid var(--sand);border-radius:12px;padding:24px;transition:all 0.3s;}
+    .review-card:hover{box-shadow:0 8px 24px rgba(92,74,30,0.1);}
+    .review-stars{color:#f0a500;font-size:1rem;margin-bottom:10px;letter-spacing:2px;}
+    .review-text{font-size:1rem;color:#5a4a30;line-height:1.7;font-style:italic;margin-bottom:14px;}
+    .review-author{display:flex;align-items:center;gap:10px;}
+    .review-avatar{width:36px;height:36px;border-radius:50%;background:var(--light-sage);display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;}
+    .review-name{font-size:0.9rem;color:var(--dark-earth);font-weight:500;}
+    .review-product{font-size:0.78rem;color:#9a8a70;}
+    /* FAQ */
+    .faq-section{background:var(--warm-white);}
+    .faq-item{border:1px solid var(--sand);border-radius:10px;margin-bottom:12px;overflow:hidden;}
+    .faq-q{width:100%;text-align:left;padding:18px 20px;background:none;border:none;font-family:'Crimson Pro',serif;font-size:1.05rem;color:var(--dark-earth);cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:background 0.2s;}
+    .faq-q:hover{background:var(--cream);}
+    .faq-q.open{background:var(--cream);}
+    .faq-arrow{font-size:1.1rem;transition:transform 0.3s;color:var(--clay);}
+    .faq-q.open .faq-arrow{transform:rotate(180deg);}
+    .faq-a{display:none;padding:0 20px 18px;font-size:0.97rem;color:#5a4a30;line-height:1.8;}
+    .faq-a.open{display:block;}
+    /* WHATSAPP BUTTON */
+    #whatsapp-btn{position:fixed;bottom:24px;left:24px;z-index:200;background:#25D366;color:white;border:none;width:52px;height:52px;border-radius:50%;font-size:1.5rem;cursor:pointer;box-shadow:0 4px 16px rgba(37,211,102,0.4);transition:all 0.3s;display:flex;align-items:center;justify-content:center;}
+    #whatsapp-btn:hover{transform:scale(1.1);box-shadow:0 6px 20px rgba(37,211,102,0.5);}
+    /* BACK TO TOP */
+    #back-to-top{position:fixed;bottom:84px;left:24px;z-index:200;background:var(--sand);color:var(--dark-earth);border:none;width:42px;height:42px;border-radius:50%;font-size:1.1rem;cursor:pointer;box-shadow:0 4px 12px rgba(92,74,30,0.2);transition:all 0.3s;display:none;align-items:center;justify-content:center;}
+    #back-to-top.visible{display:flex;}
+    #back-to-top:hover{background:var(--clay);color:white;}
+    /* LOADING SPLASH */
+    #splash{position:fixed;inset:0;background:var(--cream);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.6s;}
+    #splash.hidden{opacity:0;pointer-events:none;}
+    .splash-logo{font-family:'Playfair Display',serif;font-size:2.5rem;font-style:italic;color:var(--dark-earth);margin-bottom:8px;}
+    .splash-tag{font-size:0.9rem;color:var(--clay);letter-spacing:0.15em;}
+    .splash-bar{width:120px;height:3px;background:var(--sand);border-radius:2px;margin-top:24px;overflow:hidden;}
+    .splash-progress{height:100%;background:var(--clay);border-radius:2px;animation:loadBar 1.2s ease forwards;}
+    @keyframes loadBar{from{width:0%;}to{width:100%;}}
+    /* UPI SECTION */
+    .upi-box{background:var(--light-sage);border:1px solid #b8cca8;border-radius:10px;padding:16px 20px;margin-bottom:16px;}
+    .upi-box p{font-size:0.92rem;color:var(--moss);line-height:1.7;}
+    /* SEARCH */
+    .search-wrap{position:relative;max-width:320px;margin-bottom:20px;}
+    .search-wrap input{width:100%;padding:10px 16px 10px 40px;border:1.5px solid var(--sand);border-radius:50px;font-family:'Crimson Pro',serif;font-size:0.95rem;background:var(--cream);outline:none;transition:border-color 0.3s;}
+    .search-wrap input:focus{border-color:var(--clay);}
+    .search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#9a8a70;font-size:1rem;}
+    /* SOLD OUT in admin */
+    .toggle-sold{padding:7px 13px;border-radius:4px;font-family:'Crimson Pro',serif;cursor:pointer;font-size:0.86rem;border:none;}
+
+    @keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+    @media(max-width:768px){
+      nav{padding:12px 16px;}
+      .nav-links{display:none;}
+      section{padding:60px 20px;}
+      .hero{padding:100px 20px 60px;}
+      .hero-decoration{display:none;}
+      .about{grid-template-columns:1fr;}
+      .about-visual{display:none;}
+      .contact-grid{grid-template-columns:1fr;}
+      .admin-section{padding:40px 20px;}
+    }
+  </style>
+</head>
+<body>
+<div id="splash">
+  <div class="splash-logo">The Art Nest</div>
+  <div class="splash-tag">✦ Handmade with Heart ✦</div>
+  <div class="splash-bar"><div class="splash-progress"></div></div>
+</div>
+<div id="toast"></div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">The Art Nest</div>
+  <ul class="nav-links">
+    <li><a href="#shop">Shop</a></li>
+    <li><a href="#about">About</a></li>
+    <li><a href="#team">Our Tribe</a></li>
+    <li><a href="#reviews">Reviews</a></li>
+    <li><a href="#faq">FAQ</a></li>
+    <li><a href="#reviews">Reviews</a><a href="#faq">FAQ</a><a href="#contact">Contact</a></li>
+  </ul>
+  <div class="nav-right">
+    <!-- USER DROPDOWN -->
+    <div class="user-dropdown" id="user-dropdown-wrap">
+      <button id="nav-user-btn" onclick="toggleUserDropdown()">👤 Login</button>
+      <div class="user-dropdown-menu" id="user-dropdown-menu">
+        <!-- filled dynamically -->
+      </div>
+    </div>
+    <a href="#shop" class="btn-primary" style="padding:9px 16px;font-size:0.86rem;">Shop Now</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="home">
+  <div class="hero-circle hero-circle-1"></div>
+  <div class="hero-circle hero-circle-2"></div>
+  <div class="hero-decoration"></div>
+  <div class="hero-content">
+    <span class="hero-tag">✦ Handmade with Love</span>
+    <h1>Art created<br>from the <em>heart</em></h1>
+    <p>Unique handcrafted pieces — resin art, paintings, knitting, embroidery & more. Each piece is one-of-a-kind, made just for you.</p>
+    <div class="hero-btns">
+      <a href="#shop" class="btn-primary">Browse Shop</a>
+      <a href="#contact" class="btn-secondary">Custom Order</a>
+    </div>
+  </div>
+</section>
+
+<!-- CATEGORIES -->
+<section class="categories" id="categories">
+  <p class="section-label">What I make</p>
+  <h2 class="section-title">Explore by Category</h2>
+  <div class="categories-grid">
+    <div class="category-card"><span class="category-icon">🪨</span><h3>Resin Art</h3><p>Stunning epoxy creations</p></div>
+    <div class="category-card"><span class="category-icon">🎨</span><h3>Paintings</h3><p>Canvas & mixed media art</p></div>
+    <div class="category-card"><span class="category-icon">✏️</span><h3>Sketches</h3><p>Detailed pencil portraits</p></div>
+    <div class="category-card"><span class="category-icon">🧶</span><h3>Knitting</h3><p>Cozy handknit pieces</p></div>
+    <div class="category-card"><span class="category-icon">🌸</span><h3>Embroidery</h3><p>Delicate thread artwork</p></div>
+    <div class="category-card"><span class="category-icon">🌿</span><h3>DIY & More</h3><p>Creative handmade crafts</p></div>
+  </div>
+</section>
+
+<!-- SHOP -->
+<section id="shop">
+  <p class="section-label">Available now</p>
+  <h2 class="section-title">Shop Handmade Pieces</h2>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-bottom:8px;">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="product-search" placeholder="Search products..." oninput="filterProducts()"/>
+    </div>
+  </div>
+  <div class="filter-bar" id="filter-bar">
+    <button class="filter-btn active" onclick="setFilter('All')">All</button>
+    <button class="filter-btn" onclick="setFilter('Resin Art')">🪨 Resin Art</button>
+    <button class="filter-btn" onclick="setFilter('Painting')">🎨 Painting</button>
+    <button class="filter-btn" onclick="setFilter('Sketch')">✏️ Sketch</button>
+    <button class="filter-btn" onclick="setFilter('Knitting')">🧶 Knitting</button>
+    <button class="filter-btn" onclick="setFilter('Embroidery')">🌸 Embroidery</button>
+    <button class="filter-btn" onclick="setFilter('DIY')">🌿 DIY</button>
+  </div>
+  <div id="products-grid" class="products-grid">
+    <div style="grid-column:1/-1;text-align:center;color:#7a6a50;padding:40px;">Loading products... 🌿</div>
+  </div>
+</section>
+
+<!-- ABOUT -->
+<section class="about" id="about">
+  <div class="about-visual"><div class="about-blob">🎨</div></div>
+  <div class="about-text">
+    <p class="section-label">The artist</p>
+    <h2 class="section-title">Artist by Heart</h2>
+    <p>Hi! I'm the creator behind <strong style="color:var(--cream)">artbyartlover02</strong> — a passionate maker who finds joy in creating handmade art in every possible form.</p>
+    <p>From resin trays to embroidery hoops, pencil sketches to knitted scarves — every piece carries a little bit of my heart.</p>
+    <div class="about-stats">
+      <div class="stat"><h4>16+</h4><p>Posts shared</p></div>
+      <div class="stat"><h4>8.3K</h4><p>Monthly views</p></div>
+      <div class="stat"><h4>100%</h4><p>Handmade</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- CONTACT -->
+<section class="contact" id="contact">
+  <p class="section-label">Get in touch</p>
+  <h2 class="section-title">Send Us a Message</h2>
+  <div class="contact-grid">
+    <div class="contact-info">
+      <h3>Let's create something beautiful 🌿</h3>
+      <p>Have a question or want a custom piece? Drop us a message!</p>
+      <div class="contact-detail"><span>📸</span><span>@artbyartlover02</span></div>
+      <div class="contact-detail"><span>📧</span><span>aayushi.ioie@gmail.com</span></div>
+      <div class="contact-detail"><span>⏱️</span><span>Delivery: 5–10 working days</span></div>
+      <div class="contact-detail"><span>🇮🇳</span><span>Shipping across India</span></div>
+    </div>
+    <div class="contact-form">
+      <div class="form-group"><label>Your Name</label><input type="text" id="cf-name" placeholder="Full name"/></div>
+      <div class="form-group"><label>Email</label><input type="email" id="cf-email" placeholder="your@email.com"/></div>
+      <div class="form-group"><label>Subject</label><input type="text" id="cf-subject" placeholder="What is this about?"/></div>
+      <div class="form-group"><label>Message</label><textarea id="cf-message" placeholder="Tell me more..."></textarea></div>
+      <button class="btn-primary" style="width:100%" onclick="sendContactMessage()">Send Message 🌿</button>
+    </div>
+  </div>
+</section>
+
+<!-- REVIEWS -->
+<section class="reviews-section" id="reviews">
+  <p class="section-label">Happy customers</p>
+  <h2 class="section-title">What They're Saying 💬</h2>
+  <div class="reviews-grid">
+    <div class="review-card">
+      <div class="review-stars">★★★★★</div>
+      <p class="review-text">"The resin tray I ordered was absolutely stunning! Aayushi put so much care into every detail. Will definitely order again!"</p>
+      <div class="review-author"><div class="review-avatar">👩</div><div><div class="review-name">Priya S.</div><div class="review-product">Ocean Resin Tray</div></div></div>
+    </div>
+    <div class="review-card">
+      <div class="review-stars">★★★★★</div>
+      <p class="review-text">"Got a custom sketch made of my parents — it was the most thoughtful anniversary gift. The detail and emotion in the artwork is incredible."</p>
+      <div class="review-author"><div class="review-avatar">👨</div><div><div class="review-name">Rahul M.</div><div class="review-product">Custom Portrait Sketch</div></div></div>
+    </div>
+    <div class="review-card">
+      <div class="review-stars">★★★★★</div>
+      <p class="review-text">"The knitted scarf is so soft and beautifully made. Came in perfect packaging. Felt like receiving a gift from a friend!"</p>
+      <div class="review-author"><div class="review-avatar">👩</div><div><div class="review-name">Sneha R.</div><div class="review-product">Handknit Cozy Scarf</div></div></div>
+    </div>
+    <div class="review-card">
+      <div class="review-stars">★★★★★</div>
+      <p class="review-text">"Ordered an embroidery hoop as home décor — it exceeded my expectations! Unique, beautiful and full of heart. Highly recommend The Art Nest."</p>
+      <div class="review-author"><div class="review-avatar">👩</div><div><div class="review-name">Ananya K.</div><div class="review-product">Floral Hoop Art</div></div></div>
+    </div>
+  </div>
+  <!-- ADD REVIEW BUTTON -->
+  <div style="margin-top:36px;text-align:center;">
+    <button class="btn-secondary" onclick="openReviewModal()">✍️ Write a Review</button>
+  </div>
+  <div id="customer-reviews-list" style="margin-top:24px;"></div>
+</section>
+
+<!-- REVIEW MODAL -->
+<div class="modal-overlay" id="review-modal">
+  <div class="modal" style="max-width:460px;">
+    <button class="modal-close" onclick="closeM('review-modal')">×</button>
+    <h3>✍️ Write a Review</h3>
+    <div class="form-group"><label>Your Name</label><input type="text" id="rev-name" placeholder="Your name"/></div>
+    <div class="form-group"><label>Product Purchased</label><input type="text" id="rev-product" placeholder="e.g. Resin Tray"/></div>
+    <div class="form-group"><label>Rating</label>
+      <select id="rev-rating"><option value="5">★★★★★ (5/5)</option><option value="4">★★★★☆ (4/5)</option><option value="3">★★★☆☆ (3/5)</option></select>
+    </div>
+    <div class="form-group"><label>Your Review</label><textarea id="rev-text" placeholder="Share your experience..."></textarea></div>
+    <button class="btn-primary" style="width:100%;" onclick="submitReview()">Submit Review 🌿</button>
+  </div>
+</div>
+
+<!-- TEAM -->
+<section id="team" style="background:var(--warm-white);">
+  <p class="section-label">Behind the art</p>
+  <h2 class="section-title">Meet The Maker Tribe 🐦</h2>
+  <p style="font-size:1.05rem;color:#5a4a30;max-width:560px;margin-bottom:44px;line-height:1.8;">A small, passionate group of handmade art lovers — each bringing a unique craft to the nest. 🌿</p>
+  <div class="categories-grid">
+    <div class="category-card"><span class="category-icon">🎨</span><h3>The Painter</h3><p>Bringing canvas to life</p></div>
+    <div class="category-card"><span class="category-icon">🪨</span><h3>The Resin Artist</h3><p>Crafting epoxy masterpieces</p></div>
+    <div class="category-card"><span class="category-icon">🧶</span><h3>The Weaver</h3><p>Knitting with love & thread</p></div>
+    <div class="category-card"><span class="category-icon">✏️</span><h3>The Sketch Artist</h3><p>Capturing moments in pencil</p></div>
+  </div>
+  <div style="margin-top:32px;background:var(--cream);border:1px solid var(--sand);border-radius:12px;padding:24px 28px;max-width:460px;">
+    <p style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--dark-earth);font-style:italic;">"We don't just make art — we make memories, one handcrafted piece at a time."</p>
+    <p style="margin-top:8px;font-size:0.85rem;color:var(--clay);">— The Maker Tribe · The Art Nest</p>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="faq-section" id="faq">
+  <p class="section-label">Got questions?</p>
+  <h2 class="section-title">Frequently Asked Questions 🌿</h2>
+  <div style="max-width:720px;">
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">How long does delivery take? <span class="faq-arrow">▼</span></button><div class="faq-a">Delivery typically takes 5–10 working days within India after your order is confirmed. For custom pieces like portraits, please allow an additional 3–5 days for creation time.</div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">Do you accept custom orders? <span class="faq-arrow">▼</span></button><div class="faq-a">Absolutely! Custom orders are my favourite. You can request a specific size, colour, occasion message, or completely custom design. Just use the Contact form or WhatsApp me directly and we'll work something out together. 🎨</div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">How do I pay for my order? <span class="faq-arrow">▼</span></button><div class="faq-a">You can pay securely through Razorpay (Cards, UPI, Wallets, Net Banking) directly on the website. You can also pay via UPI to aayushi.ioie@gmail.com and send the payment screenshot on WhatsApp (+91 70248 58886).</div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">What is your return or refund policy? <span class="faq-arrow">▼</span></button><div class="faq-a">Since all items are handmade to order, I generally don't accept returns. However, if your item arrives damaged or there's a quality issue, please contact me within 48 hours with photos and I'll make it right! Customer satisfaction is my top priority. 🌿</div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">Do you ship outside India? <span class="faq-arrow">▼</span></button><div class="faq-a">Currently I ship across India only. International shipping is something I'm working towards! Follow me on Instagram @artbyartlover02 for updates.</div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">How is the packaging done? <span class="faq-arrow">▼</span></button><div class="faq-a">Every piece is packed with care using protective materials to ensure it reaches you safely. I also add a personal handwritten note with each order because every customer is special to me! 💛</div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">Can I follow your work on social media? <span class="faq-arrow">▼</span></button><div class="faq-a">Yes! Follow me on Instagram @artbyartlover02 to see my latest creations, behind-the-scenes process videos, and new product launches. I'd love to have you in The Art Nest community!</div></div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">The Art Nest</div>
+  <p>Handmade art & crafts, made with love 🎨</p>
+  <div class="social-links"><a class="social-link" href="https://instagram.com/artbyartlover02" target="_blank">📸</a></div>
+  <div class="footer-links">
+    <a href="#home">Home</a><a href="#shop">Shop</a><a href="#about">About</a><a href="#team">Our Tribe</a><a href="#reviews">Reviews</a><a href="#faq">FAQ</a><a href="#contact">Contact</a>
+  </div>
+  <p style="font-size:0.78rem;margin-top:8px;">© 2026 The Art Nest · All rights reserved</p>
+</footer>
+
+<!-- FLOATING BUTTONS -->
+<div class="fab-group">
+  <button class="fab fab-admin" id="fab-admin" onclick="handleAdminFab()">🔐 Admin</button>
+</div>
+
+
+<!-- WHATSAPP -->
+<a id="whatsapp-btn" href="https://wa.me/917024858886?text=Hi%20Aayushi!%20I%20saw%20your%20art%20on%20The%20Art%20Nest%20and%20I'm%20interested%20in%20placing%20an%20order%20🎨" target="_blank" title="Chat on WhatsApp">💬</a>
+<!-- BACK TO TOP -->
+<button id="back-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Back to top">↑</button>
+
+<!-- ===== AUTH MODAL ===== -->
+<div class="modal-overlay" id="auth-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeM('auth-modal')">×</button>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Login</button>
+      <button class="auth-tab" id="tab-signup" onclick="switchAuthTab('signup')">Sign Up</button>
+    </div>
+    <div id="auth-login">
+      <h3>Welcome back 🌿</h3>
+      <div class="form-group"><label>Email</label><input type="email" id="login-email" placeholder="your@email.com"/></div>
+      <div class="form-group"><label>Password</label><input type="password" id="login-pass" placeholder="Your password" onkeydown="if(event.key==='Enter')customerLogin()"/></div>
+      <button class="btn-primary" style="width:100%;margin-top:4px;" onclick="customerLogin()">Login</button>
+      <p style="text-align:center;margin-top:10px;font-size:0.88rem;"><a href="#" onclick="forgotPassword();return false;" style="color:var(--clay);">Forgot password?</a></p>
+      <p style="text-align:center;margin-top:8px;font-size:0.9rem;color:#7a6a50;">No account? <a href="#" onclick="switchAuthTab('signup');return false;" style="color:var(--clay);">Sign up</a></p>
+    </div>
+    <div id="auth-signup" style="display:none;">
+      <h3>Join The Art Nest 🎨</h3>
+      <div class="form-group"><label>Full Name</label><input type="text" id="signup-name" placeholder="Your full name"/></div>
+      <div class="form-group"><label>Email</label><input type="email" id="signup-email" placeholder="your@email.com"/></div>
+      <div class="form-group"><label>Phone</label><input type="text" id="signup-phone" placeholder="+91 XXXXX XXXXX"/></div>
+      <div class="form-group"><label>Password</label><input type="password" id="signup-pass" placeholder="Create a password"/></div>
+      <button class="btn-primary" style="width:100%;margin-top:4px;" onclick="customerSignup()">Create Account</button>
+      <p style="text-align:center;margin-top:12px;font-size:0.9rem;color:#7a6a50;">Have account? <a href="#" onclick="switchAuthTab('login');return false;" style="color:var(--clay);">Login</a></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ACCOUNT MODAL ===== -->
+<div class="modal-overlay" id="account-modal">
+  <div class="modal" style="max-width:520px;">
+    <button class="modal-close" onclick="closeM('account-modal')">×</button>
+    <h3>👤 My Account</h3>
+    <div id="account-info" style="background:var(--cream);border-radius:8px;padding:14px;margin-bottom:18px;"></div>
+    <!-- ACCOUNT ACTIONS -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
+      <button class="btn-outline-clay" onclick="switchAccountToLogin()">🔄 Switch Account</button>
+      <button class="btn-danger" style="border-radius:4px;" onclick="customerLogout()">🚪 Logout</button>
+    </div>
+    <h4 style="font-family:'Playfair Display',serif;color:var(--dark-earth);margin-bottom:12px;font-size:1.1rem;">My Orders</h4>
+    <div id="my-orders-list"></div>
+  </div>
+</div>
+
+<!-- ===== ORDER MODAL ===== -->
+<div class="modal-overlay" id="order-modal">
+  <div class="modal" style="max-width:500px;">
+    <button class="modal-close" onclick="closeM('order-modal')">×</button>
+    <h3>🛒 Place Your Order</h3>
+    <div id="order-product-info" style="background:var(--cream);border-radius:8px;padding:14px;margin-bottom:18px;"></div>
+    <div class="form-group"><label>Delivery Address</label><textarea id="order-address" placeholder="Full delivery address..." style="height:80px;"></textarea></div>
+    <div class="form-group"><label>Special Requests (optional)</label><input type="text" id="order-note" placeholder="Colours, size, occasion..."/></div>
+    <div class="upi-box">
+      <p>💳 <strong>Payment options:</strong> Razorpay (Cards, UPI, Wallets) or direct UPI<br>
+      📱 <strong>UPI ID:</strong> aayushi.ioie@gmail.com<br>
+      After UPI payment, share screenshot on WhatsApp: <strong>+91 70248 58886</strong></p>
+    </div>
+    <button class="btn-primary" style="width:100%;" onclick="placeOrder()">Pay & Place Order 💳</button>
+  </div>
+</div>
+
+<!-- ===== ADMIN LOGIN MODAL ===== -->
+<div class="modal-overlay" id="admin-login-modal">
+  <div class="modal" style="max-width:400px;">
+    <button class="modal-close" onclick="closeM('admin-login-modal')">×</button>
+    <h3>🔐 Admin Login</h3>
+    <p style="color:#7a6a50;margin-bottom:16px;font-size:0.95rem;">Enter your admin password to access the dashboard.</p>
+    <div class="form-group"><label>Password</label><input type="password" id="admin-pass" placeholder="Admin password" onkeydown="if(event.key==='Enter')adminLogin()"/></div>
+    <button class="btn-primary" style="width:100%;" onclick="adminLogin()">Login as Admin</button>
+    <p style="margin-top:10px;font-size:0.78rem;color:#aaa;text-align:center;">Default: <strong>artnest123</strong></p>
+  </div>
+</div>
+
+<!-- ===== ADMIN PANEL ===== -->
+<div class="admin-section" id="admin-panel">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
+    <div><p class="section-label">Admin Dashboard</p><h2 class="section-title" style="margin-bottom:0;">The Art Nest HQ 🛒</h2></div>
+    <button onclick="adminLogout()" style="background:transparent;border:1.5px solid var(--clay);color:var(--clay);padding:9px 20px;border-radius:4px;font-family:'Crimson Pro',serif;font-size:0.9rem;cursor:pointer;">Logout</button>
+  </div>
+  <div class="admin-tabs">
+    <button class="admin-tab-btn active" onclick="switchAdminTab('orders')">📦 Orders</button>
+    <button class="admin-tab-btn" onclick="switchAdminTab('messages')">💬 Messages</button>
+    <button class="admin-tab-btn" onclick="switchAdminTab('products')">🎨 Products</button>
+    <button class="admin-tab-btn" onclick="switchAdminTab('customers')">👥 Customers</button>
+    <button class="admin-tab-btn" onclick="switchAdminTab('offers')">🎉 Offers & Sales</button>
+    <button class="admin-tab-btn" onclick="openM('admin-change-pass-modal')">🔑 Change Password</button>
+  </div>
+  <!-- ORDERS -->
+  <div class="admin-tab-content active" id="tab-orders">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+      <h3 style="font-family:'Playfair Display',serif;color:var(--dark-earth);">All Orders</h3>
+      <div id="orders-summary" style="font-size:0.88rem;color:#7a6a50;"></div>
+    </div>
+    <div id="admin-orders-list"></div>
+  </div>
+  <!-- MESSAGES -->
+  <div class="admin-tab-content" id="tab-messages">
+    <h3 style="font-family:'Playfair Display',serif;color:var(--dark-earth);margin-bottom:16px;">Customer Messages</h3>
+    <div id="admin-messages-list"></div>
+  </div>
+  <!-- PRODUCTS -->
+  <div class="admin-tab-content" id="tab-products">
+    <div style="background:var(--warm-white);border:1px solid var(--sand);border-radius:12px;padding:26px;margin-bottom:28px;">
+      <h3 style="font-family:'Playfair Display',serif;color:var(--dark-earth);margin-bottom:18px;">➕ Add New Product</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div class="form-group"><label>Product Name</label><input type="text" id="new-name" placeholder="e.g. Ocean Resin Tray"/></div>
+        <div class="form-group"><label>Price (₹)</label><input type="text" id="new-price" placeholder="e.g. 899"/></div>
+        <div class="form-group"><label>Category</label>
+          <select id="new-category"><option>Resin Art</option><option>Painting</option><option>Sketch</option><option>Knitting</option><option>Embroidery</option><option>DIY</option></select>
+        </div>
+        <div class="form-group"><label>Description</label><input type="text" id="new-desc" placeholder="Short description"/></div>
+        <div class="form-group" style="grid-column:1/-1;"><label>Product Image</label>
+          <input type="file" id="new-image" accept="image/*" onchange="previewNewImage(this)" style="padding:8px;background:var(--cream);border:1.5px dashed var(--clay);border-radius:6px;width:100%;cursor:pointer;"/>
+          <div id="new-image-preview" style="margin-top:8px;display:none;"><img id="new-preview-img" style="width:100px;height:100px;object-fit:cover;border-radius:8px;border:2px solid var(--sand);"/></div>
+        </div>
+      </div>
+      <button class="btn-primary" style="margin-top:4px;" onclick="addProduct()">Add Product 🎨</button>
+    </div>
+    <h3 style="font-family:'Playfair Display',serif;color:var(--dark-earth);margin-bottom:14px;">✏️ Manage Products</h3>
+    <div id="admin-products-list"></div>
+  </div>
+  <!-- CUSTOMERS -->
+  <div class="admin-tab-content" id="tab-customers">
+    <h3 style="font-family:'Playfair Display',serif;color:var(--dark-earth);margin-bottom:16px;">Registered Customers</h3>
+    <div id="admin-customers-list"></div>
+  </div>
+  <!-- OFFERS & SALES -->
+  <div class="admin-tab-content" id="tab-offers">
+    <div style="margin-bottom:24px;">
+      <p class="section-label">Manage discounts</p>
+      <h3 style="font-family:'Playfair Display',serif;color:var(--dark-earth);margin-bottom:8px;">Offers & Sales 🎉</h3>
+      <p style="font-size:0.95rem;color:#7a6a50;margin-bottom:20px;">Set a discount % on any product. It will show as a sale price to customers with a red badge.</p>
+    </div>
+    <div id="admin-offers-list"></div>
+  </div>
+</div>
+
+<!-- EDIT PRODUCT MODAL -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal" style="max-width:500px;">
+    <button class="modal-close" onclick="closeM('edit-modal')">×</button>
+    <h3>✏️ Edit Product</h3>
+    <input type="hidden" id="edit-id"/>
+    <div style="margin-top:12px;">
+      <div class="form-group"><label>Product Name</label><input type="text" id="edit-name"/></div>
+      <div class="form-group"><label>Price (₹)</label><input type="text" id="edit-price"/></div>
+      <div class="form-group"><label>Category</label>
+        <select id="edit-category"><option>Resin Art</option><option>Painting</option><option>Sketch</option><option>Knitting</option><option>Embroidery</option><option>DIY</option></select>
+      </div>
+      <div class="form-group"><label>Description</label><input type="text" id="edit-desc"/></div>
+      <div class="form-group"><label>Update Image (optional)</label>
+        <input type="file" id="edit-image" accept="image/*" onchange="previewEditImage(this)" style="padding:8px;background:var(--cream);border:1.5px dashed var(--clay);border-radius:6px;width:100%;cursor:pointer;"/>
+        <div style="margin-top:8px;"><img id="edit-preview-img" style="width:85px;height:85px;object-fit:cover;border-radius:8px;border:2px solid var(--sand);display:none;"/></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:4px;">
+      <button class="btn-primary" style="flex:1;" onclick="saveEdit()">Save ✅</button>
+      <button class="btn-secondary" style="flex:1;" onclick="closeM('edit-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============ CONFIG ============
+const ADMIN_EMAIL_ADDR = 'aayushi.ioie@gmail.com';
+const EMAILJS_SERVICE_ID = 'YOUR_SERVICE_ID';
+const EMAILJS_TEMPLATE_ORDER = 'YOUR_ORDER_TEMPLATE_ID';
+const EMAILJS_TEMPLATE_CONTACT = 'YOUR_CONTACT_TEMPLATE_ID';
+const EMAILJS_PUBLIC_KEY = 'YOUR_PUBLIC_KEY';
+// RAZORPAY SETUP: 
+// 1. Go to razorpay.com → Sign up → Settings → API Keys → Generate Key
+// 2. Copy the Key ID and paste below replacing YOUR_RAZORPAY_KEY_ID
+// 3. For test mode use test key, for live use live key
+const RAZORPAY_KEY = 'YOUR_RAZORPAY_KEY_ID';
+
+// EMAILJS SETUP:
+// 1. Go to emailjs.com → Sign up free → Email Services → Add Gmail
+// 2. Templates → Create Template → note the Template ID
+// 3. Account → API Keys → copy Public Key
+// 4. Replace YOUR_SERVICE_ID, YOUR_ORDER_TEMPLATE_ID, YOUR_CONTACT_TEMPLATE_ID, YOUR_PUBLIC_KEY below
+const CATEGORY_ICONS = {'Resin Art':'🪨','Painting':'🎨','Sketch':'✏️','Knitting':'🧶','Embroidery':'🌸','DIY':'🌿'};
+
+const DEFAULT_PRODUCTS = [
+  {id:'p1',name:'Ocean Resin Tray',price:'899',category:'Resin Art',desc:'Handpoured epoxy resin with blue & gold swirls. Perfect decorative piece.',image:'',soldOut:false},
+  {id:'p2',name:'Abstract Canvas Art',price:'1299',category:'Painting',desc:'Acrylic painting on canvas, rich earthy tones. Ready to hang, 12×16 inch.',image:'',soldOut:false},
+  {id:'p3',name:'Custom Portrait Sketch',price:'699',category:'Sketch',desc:'Send a photo, get a hand-drawn pencil portrait. A meaningful personal gift.',image:'',soldOut:false},
+  {id:'p4',name:'Handknit Cozy Scarf',price:'549',category:'Knitting',desc:'Soft wool blend, custom colors available. Perfect for gifting this season.',image:'',soldOut:false},
+  {id:'p5',name:'Floral Hoop Art',price:'449',category:'Embroidery',desc:'Hand-embroidered floral design on linen. Ready to display in a 6-inch hoop.',image:'',soldOut:false},
+  {id:'p6',name:'Macramé Wall Hanging',price:'799',category:'DIY',desc:'Handcrafted cotton rope wall décor. Boho style, natural tones.',image:'',soldOut:false}
+];
+
+// ============ FIREBASE HELPERS ============
+function fb(){return window._fb;}
+function fbDb(){return window._fb?.db;}
+function fbAuth(){return window._fb?.auth;}
+function getCurrentUser(){return window._currentFBUser||null;}
+function isAdmin(){return window._isAdmin===true;}
+
+// LS fallback for products (images are too large for Firestore)
+function lsGet(k,d=null){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
+const loadProducts=()=>lsGet('artnest_products',DEFAULT_PRODUCTS);
+const saveProducts=p=>lsSet('artnest_products',p);
+
+// ============ TOAST ============
+function showToast(msg,dur=3200){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),dur);
+}
+
+// ============ MODALS ============
+function closeM(id){document.getElementById(id).classList.remove('open');}
+function openM(id){document.getElementById(id).classList.add('open');}
+
+// ============ USER DROPDOWN ============
+function toggleUserDropdown(){
+  const user=getCurrentUser();
+  const menu=document.getElementById('user-dropdown-menu');
+  if(menu.classList.contains('open')){menu.classList.remove('open');return;}
+  if(user){
+    menu.innerHTML=`
+      <div style="padding:12px 16px;border-bottom:1px solid var(--sand);">
+        <p style="font-size:0.95rem;color:var(--dark-earth);font-weight:500;">👤 ${user.name||user.email}</p>
+        <p style="font-size:0.8rem;color:#9a8a70;">${user.email}</p>
+      </div>
+      <button class="dropdown-item" onclick="openAccountModal();closeDropdown();">📦 My Orders</button>
+      <button class="dropdown-item" onclick="openChangePasswordModal();closeDropdown();">🔑 Change Password</button>
+      <div class="dropdown-divider"></div>
+      <button class="dropdown-item" onclick="switchAccountToLogin()">🔄 Switch Account</button>
+      <button class="dropdown-item danger" onclick="customerLogout()">🚪 Logout</button>`;
+  } else {
+    menu.innerHTML=`
+      <button class="dropdown-item" onclick="openAuthAndClose('login')">🔑 Login</button>
+      <button class="dropdown-item" onclick="openAuthAndClose('signup')">✨ Sign Up</button>`;
+  }
+  menu.classList.add('open');
+  setTimeout(()=>document.addEventListener('click',outsideDropdownClose,{once:true}),10);
+}
+function outsideDropdownClose(e){
+  const wrap=document.getElementById('user-dropdown-wrap');
+  if(!wrap.contains(e.target)) document.getElementById('user-dropdown-menu').classList.remove('open');
+}
+function closeDropdown(){document.getElementById('user-dropdown-menu').classList.remove('open');}
+function openAuthAndClose(tab){closeDropdown();switchAuthTab(tab);openM('auth-modal');}
+
+// ============ AUTH ============
+function switchAuthTab(tab){
+  document.getElementById('auth-login').style.display=tab==='login'?'block':'none';
+  document.getElementById('auth-signup').style.display=tab==='signup'?'block':'none';
+  document.getElementById('tab-login').classList.toggle('active',tab==='login');
+  document.getElementById('tab-signup').classList.toggle('active',tab==='signup');
+}
+
+async function customerSignup(){
+  const name=document.getElementById('signup-name').value.trim();
+  const email=document.getElementById('signup-email').value.trim().toLowerCase();
+  const phone=document.getElementById('signup-phone').value.trim();
+  const pass=document.getElementById('signup-pass').value;
+  if(!name||!email||!pass){showToast('Please fill all required fields!');return;}
+  if(pass.length<6){showToast('Password must be at least 6 characters!');return;}
+  try {
+    const cred = await fb().createUserWithEmailAndPassword(fbAuth(), email, pass);
+    const userData = {uid:cred.user.uid, name, email, phone, role:'customer', joinedAt: new Date().toLocaleDateString('en-IN')};
+    await fb().setDoc(fb().doc(fbDb(),'customers',cred.user.uid), userData);
+    closeM('auth-modal');
+    showToast(`Welcome to The Art Nest, ${name}! 🎨`);
+  } catch(e) {
+    if(e.code==='auth/email-already-in-use') showToast('Email already registered! Please login.');
+    else showToast('Signup failed: '+e.message);
+  }
+}
+
+async function customerLogin(){
+  const email=document.getElementById('login-email').value.trim().toLowerCase();
+  const pass=document.getElementById('login-pass').value;
+  if(!email||!pass){showToast('Please enter email and password!');return;}
+  try {
+    await fb().signInWithEmailAndPassword(fbAuth(), email, pass);
+    closeM('auth-modal');
+    showToast('Welcome back! 🌿');
+  } catch(e) {
+    showToast('Invalid email or password. Try again!');
+  }
+}
+
+async function customerLogout(){
+  await fb().signOut(fbAuth());
+  window._currentFBUser=null;window._isAdmin=false;
+  closeM('account-modal');closeDropdown();
+  document.getElementById('admin-panel').style.display='none';
+  document.getElementById('fab-admin').textContent='🔐 Admin';
+  updateNavUser();renderShop();
+  showToast('Logged out successfully.');
+}
+
+async function forgotPassword(){
+  const email=document.getElementById('login-email').value.trim();
+  if(!email){showToast('Please enter your email address first!');return;}
+  try{
+    await fb().sendPasswordResetEmail(fbAuth(),email);
+    showToast('Password reset email sent! Check your inbox 📧');
+  }catch(e){showToast('Error: '+e.message);}
+}
+
+async function adminForgotPassword(){
+  const email=document.getElementById('admin-pass-email').value.trim();
+  if(!email){showToast('Please enter your admin email first!');return;}
+  try{
+    await fb().sendPasswordResetEmail(fbAuth(),email);
+    showToast('Password reset email sent to '+email+' 📧');
+  }catch(e){showToast('Error: '+e.message);}
+}
+
+function switchAccountToLogin(){
+  fb().signOut(fbAuth());
+  closeM('account-modal');closeDropdown();
+  document.getElementById('login-email').value='';
+  document.getElementById('login-pass').value='';
+  switchAuthTab('login');
+  openM('auth-modal');
+  showToast('Logged out. Please login with another account.');
+}
+
+function updateNavUser(){
+  const user=getCurrentUser();
+  const btn=document.getElementById('nav-user-btn');
+  btn.textContent=user?`👤 ${(user.name||user.email).split(' ')[0]}`:'👤 Login';
+  document.getElementById('user-dropdown-menu').classList.remove('open');
+}
+
+// ============ CHANGE PASSWORD ============
+function openChangePasswordModal(){
+  openM('change-pass-modal');
+}
+
+async function changePassword(){
+  const current=document.getElementById('cp-current').value;
+  const newPass=document.getElementById('cp-new').value;
+  const confirm=document.getElementById('cp-confirm').value;
+  if(!current||!newPass||!confirm){showToast('Please fill all fields!');return;}
+  if(newPass.length<6){showToast('New password must be at least 6 characters!');return;}
+  if(newPass!==confirm){showToast('New passwords do not match!');return;}
+  try {
+    const user=fbAuth().currentUser;
+    const cred=fb().EmailAuthProvider.credential(user.email, current);
+    await fb().reauthenticateWithCredential(user, cred);
+    await fb().updatePassword(user, newPass);
+    closeM('change-pass-modal');
+    document.getElementById('cp-current').value='';
+    document.getElementById('cp-new').value='';
+    document.getElementById('cp-confirm').value='';
+    showToast('Password changed successfully! 🔑');
+  } catch(e) {
+    if(e.code==='auth/wrong-password') showToast('Current password is incorrect!');
+    else showToast('Error: '+e.message);
+  }
+}
+
+// ============ ACCOUNT MODAL ============
+async function openAccountModal(){
+  const user=getCurrentUser();
+  if(!user){openM('auth-modal');return;}
+  document.getElementById('account-info').innerHTML=`
+    <p style="font-family:'Playfair Display',serif;font-size:1.05rem;color:var(--dark-earth);margin-bottom:4px;">👤 ${user.name||'—'}</p>
+    <p style="font-size:0.88rem;color:#7a6a50;">📧 ${user.email}</p>
+    ${user.phone?`<p style="font-size:0.88rem;color:#7a6a50;">📱 ${user.phone}</p>`:''}`;
+  const list=document.getElementById('my-orders-list');
+  list.innerHTML='<p style="color:#7a6a50;">Loading orders...</p>';
+  openM('account-modal');
+  try {
+    const q=fb().query(fb().collection(fbDb(),'orders'),fb().where('userId','==',user.uid),fb().orderBy('createdAt','desc'));
+    const snap=await fb().getDocs(q);
+    const orders=snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(!orders.length){list.innerHTML='<p style="color:#7a6a50;font-size:0.95rem;">No orders yet. Start shopping! 🛍️</p>';return;}
+    list.innerHTML=orders.map(o=>`
+      <div class="order-card">
+        <div class="order-card-header">
+          <div><strong style="color:var(--dark-earth);">${o.productName}</strong><br><span style="font-size:0.82rem;color:#9a8a70;">${o.date||''}</span></div>
+          <span class="order-status status-${o.status||'pending'}">${o.status||'Pending'}</span>
+        </div>
+        <p style="font-size:0.88rem;color:#5a4a30;">💰 ₹${Number(o.amount).toLocaleString('en-IN')} &nbsp;|&nbsp; 📍 ${o.address}</p>
+        ${o.note?`<p style="font-size:0.82rem;color:#7a6a50;margin-top:4px;">📝 ${o.note}</p>`:''}
+        <p style="font-size:0.8rem;color:${o.paymentStatus==='Paid'?'#155724':'var(--clay)'};margin-top:5px;">💳 ${o.paymentStatus}</p>
+      </div>`).join('');
+  } catch(e){list.innerHTML='<p style="color:#7a6a50;">Could not load orders.</p>';}
+}
+
+// ============ SHOP ============
+let _activeFilter='All';
+function setFilter(cat){
+  _activeFilter=cat;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.textContent.includes(cat)||(cat==='All'&&b.textContent==='All')));
+  filterProducts();
+}
+function filterProducts(){
+  const search=(document.getElementById('product-search')?.value||'').toLowerCase();
+  const products=loadProducts();
+  const user=getCurrentUser();
+  const grid=document.getElementById('products-grid');
+  const filtered=products.filter(p=>{
+    const matchCat=_activeFilter==='All'||p.category===_activeFilter;
+    const matchSearch=!search||p.name.toLowerCase().includes(search)||p.category.toLowerCase().includes(search)||p.desc.toLowerCase().includes(search);
+    return matchCat&&matchSearch;
+  });
+  if(!filtered.length){grid.innerHTML='<div style="grid-column:1/-1;text-align:center;color:#7a6a50;padding:60px;">No products found 🌿</div>';return;}
+  grid.innerHTML=filtered.map(p=>`
+    <div class="product-card">
+      <div class="product-img">${p.image?`<img src="${p.image}" alt="${p.name}"/>`:`<span>${CATEGORY_ICONS[p.category]||'🎨'}</span>`}</div>
+      ${p.soldOut?'<span class="sold-out-badge">Sold Out</span>':''}
+      ${p.offer?`<span style="position:absolute;top:12px;right:12px;background:#e74c3c;color:white;font-size:0.72rem;padding:4px 10px;border-radius:20px;font-weight:bold;">${p.offer}% OFF</span>`:''}
+      <div class="product-body">
+        <span class="product-tag">${p.category}</span>
+        <h3>${p.name}</h3>
+        <p>${p.desc}</p>
+        <div class="product-footer">
+          <div>
+            ${p.offer?`<span style="font-size:0.85rem;color:#aaa;text-decoration:line-through;">₹${Number(p.price).toLocaleString('en-IN')}</span><br>`:''}
+            <span class="product-price" style="${p.offer?'color:#e74c3c;':''}">₹${p.offer?Math.round(Number(p.price)*(1-p.offer/100)).toLocaleString('en-IN'):Number(p.price).toLocaleString('en-IN')}</span>
+          </div>
+          ${p.soldOut?'<button class="order-btn" disabled style="background:#aaa;cursor:not-allowed;">Sold Out</button>':`<button class="order-btn" onclick="initiateOrder('${p.id}')">${user?'Order Now':'Login to Order'}</button>`}
+        </div>
+      </div>
+    </div>`).join('');
+  // Show active offers banner
+  renderOffersBanner();
+}
+function renderShop(){filterProducts();}
+
+// ============ OFFERS BANNER ============
+function renderOffersBanner(){
+  const products=loadProducts();
+  const onSale=products.filter(p=>p.offer&&!p.soldOut);
+  let banner=document.getElementById('offers-banner');
+  if(!banner){
+    const shop=document.getElementById('shop');
+    banner=document.createElement('div');
+    banner.id='offers-banner';
+    shop.insertBefore(banner,shop.querySelector('.filter-bar')||shop.querySelector('#products-grid'));
+  }
+  if(onSale.length){
+    banner.innerHTML=`<div style="background:linear-gradient(135deg,var(--clay),var(--dark-earth));color:white;border-radius:10px;padding:14px 20px;margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span style="font-size:1.4rem;">🎉</span>
+      <div><strong style="font-family:'Playfair Display',serif;font-size:1.1rem;">Special Offers Active!</strong>
+      <p style="font-size:0.88rem;opacity:0.9;margin-top:2px;">${onSale.map(p=>`${p.name} — ${p.offer}% OFF`).join(' &nbsp;·&nbsp; ')}</p></div>
+    </div>`;
+  } else {banner.innerHTML='';}
+}
+
+// ============ ORDER ============
+let _orderProduct=null;
+function initiateOrder(pid){
+  const user=getCurrentUser();
+  if(!user){showToast('Please login to place an order! 👤');switchAuthTab('login');openM('auth-modal');return;}
+  const p=loadProducts().find(x=>x.id===pid);if(!p)return;
+  _orderProduct=p;
+  const finalPrice=p.offer?Math.round(Number(p.price)*(1-p.offer/100)):Number(p.price);
+  document.getElementById('order-product-info').innerHTML=`
+    <strong style="font-size:1.05rem;">${p.name}</strong><br>
+    ${p.offer?`<span style="text-decoration:line-through;color:#aaa;font-size:0.9rem;">₹${Number(p.price).toLocaleString('en-IN')}</span> `:''}
+    <span style="color:${p.offer?'#e74c3c':'var(--clay)'};">₹${finalPrice.toLocaleString('en-IN')}</span>
+    ${p.offer?`<span style="background:#e74c3c;color:white;font-size:0.75rem;padding:2px 8px;border-radius:10px;margin-left:8px;">${p.offer}% OFF</span>`:''}
+    <span style="font-size:0.85rem;color:#7a6a50;margin-left:8px;">(${p.category})</span>`;
+  document.getElementById('order-address').value='';
+  document.getElementById('order-note').value='';
+  openM('order-modal');
+}
+
+async function placeOrder(){
+  const user=getCurrentUser();if(!user||!_orderProduct)return;
+  const address=document.getElementById('order-address').value.trim();
+  const note=document.getElementById('order-note').value.trim();
+  if(!address){showToast('Please enter your delivery address!');return;}
+  const p=_orderProduct;
+  const finalPrice=p.offer?Math.round(Number(p.price)*(1-p.offer/100)):Number(p.price);
+  if(!RAZORPAY_KEY||RAZORPAY_KEY==='YOUR_RAZORPAY_KEY_ID'){
+    await saveOrderToFirestore(user,p,address,note,finalPrice,'Demo','demo_'+Date.now());
+    closeM('order-modal');showToast('Order placed! (Demo mode) ✅');openAccountModal();return;
+  }
+  const opts={
+    key:RAZORPAY_KEY,amount:finalPrice*100,currency:'INR',
+    name:'The Art Nest',description:`Order: ${p.name}`,
+    prefill:{name:user.name,email:user.email,contact:user.phone||''},
+    theme:{color:'#5c4a1e'},
+    handler:async function(res){
+      await saveOrderToFirestore(user,p,address,note,finalPrice,'Paid',res.razorpay_payment_id);
+      closeM('order-modal');showToast('Payment successful! 🎉');openAccountModal();
+    },
+    modal:{ondismiss:function(){showToast('Payment cancelled.');}}
+  };
+  try{new Razorpay(opts).open();}catch(e){showToast('Razorpay not loaded.');}
+}
+
+async function saveOrderToFirestore(user,p,address,note,amount,paymentStatus,paymentId){
+  try{
+    await fb().addDoc(fb().collection(fbDb(),'orders'),{
+      userId:user.uid,userName:user.name||user.email,userEmail:user.email,userPhone:user.phone||'—',
+      productId:p.id,productName:p.name,category:p.category,amount:String(amount),address,note,
+      paymentStatus,paymentId,status:'pending',date:new Date().toLocaleString('en-IN'),
+      createdAt:fb().serverTimestamp()
+    });
+  }catch(e){console.error(e);}
+}
+
+// ============ CONTACT MESSAGE ============
+async function sendContactMessage(){
+  const name=document.getElementById('cf-name').value.trim();
+  const email=document.getElementById('cf-email').value.trim();
+  const subject=document.getElementById('cf-subject').value.trim();
+  const message=document.getElementById('cf-message').value.trim();
+  if(!name||!email||!message){showToast('Please fill in name, email and message!');return;}
+  try{
+    await fb().addDoc(fb().collection(fbDb(),'messages'),{
+      name,email,subject,message,date:new Date().toLocaleString('en-IN'),read:false,createdAt:fb().serverTimestamp()
+    });
+  }catch(e){}
+  ['cf-name','cf-email','cf-subject','cf-message'].forEach(id=>document.getElementById(id).value='');
+  showToast(`Message sent! We'll get back to you soon 🌿`);
+}
+
+// ============ ADMIN ============
+function handleAdminFab(){
+  if(isAdmin()){document.getElementById('admin-panel').scrollIntoView({behavior:'smooth'});}
+  else{openM('admin-login-modal');setTimeout(()=>document.getElementById('admin-pass').focus(),100);}
+}
+
+async function adminLogin(){
+  const email=document.getElementById('admin-pass-email').value.trim();
+  const pass=document.getElementById('admin-pass').value;
+  if(!email||!pass){showToast('Enter email and password!');return;}
+  try{
+    const cred=await fb().signInWithEmailAndPassword(fbAuth(),email,pass);
+    const snap=await fb().getDoc(fb().doc(fbDb(),'customers',cred.user.uid));
+    if(snap.exists()&&snap.data().role==='admin'){
+      window._isAdmin=true;
+      closeM('admin-login-modal');
+      document.getElementById('admin-panel').style.display='block';
+      document.getElementById('fab-admin').textContent='🛒 Dashboard';
+      document.getElementById('admin-pass').value='';
+      document.getElementById('admin-pass-email').value='';
+      renderAdminOrders();renderAdminMessages();renderAdminList();renderAdminCustomers();renderAdminOffers();
+      document.getElementById('admin-panel').scrollIntoView({behavior:'smooth'});
+    } else {
+      await fb().signOut(fbAuth());
+      showToast('You are not an admin!');
+    }
+  }catch(e){
+    const inp=document.getElementById('admin-pass');
+    inp.style.borderColor='#c0392b';inp.value='';inp.placeholder='Wrong credentials!';
+    setTimeout(()=>{inp.style.borderColor='';inp.placeholder='Admin password';},2000);
+  }
+}
+
+async function adminLogout(){
+  await fb().signOut(fbAuth());
+  window._isAdmin=false;
+  document.getElementById('admin-panel').style.display='none';
+  document.getElementById('fab-admin').textContent='🔐 Admin';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+async function adminChangePassword(){
+  const newPass=document.getElementById('admin-new-pass').value.trim();
+  const confirm=document.getElementById('admin-confirm-pass').value.trim();
+  if(!newPass||!confirm){showToast('Please fill both fields!');return;}
+  if(newPass.length<6){showToast('Password must be at least 6 characters!');return;}
+  if(newPass!==confirm){showToast('Passwords do not match!');return;}
+  try{
+    await fb().updatePassword(fbAuth().currentUser, newPass);
+    closeM('admin-change-pass-modal');
+    document.getElementById('admin-new-pass').value='';
+    document.getElementById('admin-confirm-pass').value='';
+    showToast('Admin password changed! 🔑');
+  }catch(e){showToast('Error: '+e.message);}
+}
+
+function switchAdminTab(tab){
+  const tabs=['orders','messages','products','customers','offers'];
+  document.querySelectorAll('.admin-tab-btn').forEach((b,i)=>b.classList.toggle('active',tabs[i]===tab));
+  document.querySelectorAll('.admin-tab-content').forEach(c=>c.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+}
+
+async function renderAdminOrders(){
+  const list=document.getElementById('admin-orders-list');
+  list.innerHTML='<p style="color:#7a6a50;">Loading...</p>';
+  try{
+    const q=fb().query(fb().collection(fbDb(),'orders'),fb().orderBy('createdAt','desc'));
+    const snap=await fb().getDocs(q);
+    const orders=snap.docs.map(d=>({id:d.id,...d.data()}));
+    const total=orders.reduce((s,o)=>s+(o.paymentStatus==='Paid'?Number(o.amount):0),0);
+    document.getElementById('orders-summary').innerHTML=`${orders.length} orders · ₹${total.toLocaleString('en-IN')} collected`;
+    if(!orders.length){list.innerHTML='<p style="color:#7a6a50;">No orders yet.</p>';return;}
+    list.innerHTML=orders.map(o=>`
+      <div class="order-card">
+        <div class="order-card-header">
+          <div><strong style="color:var(--dark-earth);">${o.productName}</strong> <span style="font-size:0.84rem;color:#7a6a50;">by ${o.userName}</span><br><span style="font-size:0.8rem;color:#9a8a70;">${o.date||''}</span></div>
+          <span class="order-status status-${o.status}">${o.status}</span>
+        </div>
+        <p style="font-size:0.88rem;color:#5a4a30;margin-bottom:5px;">💰 ₹${Number(o.amount).toLocaleString('en-IN')} &nbsp;|&nbsp; 📧 ${o.userEmail} &nbsp;|&nbsp; 📱 ${o.userPhone}</p>
+        <p style="font-size:0.86rem;color:#5a4a30;margin-bottom:5px;">📍 ${o.address}</p>
+        ${o.note?`<p style="font-size:0.83rem;color:#7a6a50;">📝 ${o.note}</p>`:''}
+        <p style="font-size:0.8rem;color:${o.paymentStatus==='Paid'?'#155724':'#856404'};margin-top:5px;">💳 ${o.paymentStatus}</p>
+        <div style="margin-top:10px;">
+          <select onchange="updateOrderStatus('${o.id}',this.value)" style="padding:6px 12px;border:1px solid var(--sand);border-radius:4px;font-family:'Crimson Pro',serif;background:var(--cream);font-size:0.88rem;">
+            ${['pending','confirmed','paid','delivered'].map(s=>`<option value="${s}"${o.status===s?' selected':''}>${s.charAt(0).toUpperCase()+s.slice(1)}</option>`).join('')}
+          </select>
+        </div>
+      </div>`).join('');
+  }catch(e){list.innerHTML='<p style="color:#7a6a50;">Error loading orders.</p>';}
+}
+
+async function updateOrderStatus(orderId,status){
+  try{
+    await fb().updateDoc(fb().doc(fbDb(),'orders',orderId),{status});
+    showToast('Status updated ✅');renderAdminOrders();
+  }catch(e){showToast('Error updating status');}
+}
+
+async function renderAdminMessages(){
+  const list=document.getElementById('admin-messages-list');
+  list.innerHTML='<p style="color:#7a6a50;">Loading...</p>';
+  try{
+    const q=fb().query(fb().collection(fbDb(),'messages'),fb().orderBy('createdAt','desc'));
+    const snap=await fb().getDocs(q);
+    const msgs=snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(!msgs.length){list.innerHTML='<p style="color:#7a6a50;">No messages yet.</p>';return;}
+    list.innerHTML=msgs.map(m=>`
+      <div class="order-card" style="${!m.read?'border-left:3px solid var(--clay);':''}">
+        <div class="order-card-header">
+          <div><strong style="color:var(--dark-earth);">${m.name}</strong> <span style="font-size:0.83rem;color:#7a6a50;">&lt;${m.email}&gt;</span></div>
+          <span style="font-size:0.78rem;color:#9a8a70;">${m.date||''}</span>
+        </div>
+        ${m.subject?`<p style="font-size:0.86rem;color:var(--clay);margin-bottom:5px;"><strong>${m.subject}</strong></p>`:''}
+        <p style="font-size:0.93rem;color:#5a4a30;line-height:1.6;">${m.message}</p>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+          <a href="mailto:${m.email}?subject=Re: ${encodeURIComponent(m.subject||'Your message')}" class="btn-primary" style="padding:6px 14px;font-size:0.83rem;">Reply via Email</a>
+          ${!m.read?`<button onclick="markMsgRead('${m.id}')" style="background:var(--light-sage);color:var(--moss);border:none;padding:6px 12px;border-radius:4px;font-family:'Crimson Pro',serif;font-size:0.83rem;cursor:pointer;">Mark Read ✓</button>`:'<span style="font-size:0.78rem;color:#9a8a70;padding:6px 0;">✓ Read</span>'}
+        </div>
+      </div>`).join('');
+  }catch(e){list.innerHTML='<p style="color:#7a6a50;">Error loading messages.</p>';}
+}
+
+async function markMsgRead(id){
+  try{await fb().updateDoc(fb().doc(fbDb(),'messages',id),{read:true});renderAdminMessages();}catch(e){}
+}
+
+async function renderAdminCustomers(){
+  const list=document.getElementById('admin-customers-list');
+  list.innerHTML='<p style="color:#7a6a50;">Loading...</p>';
+  try{
+    const snap=await fb().getDocs(fb().collection(fbDb(),'customers'));
+    const customers=snap.docs.map(d=>({id:d.id,...d.data()})).filter(c=>c.role!=='admin');
+    if(!customers.length){list.innerHTML='<p style="color:#7a6a50;">No customers yet.</p>';return;}
+    const ordersSnap=await fb().getDocs(fb().collection(fbDb(),'orders'));
+    const orders=ordersSnap.docs.map(d=>d.data());
+    list.innerHTML=`<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.92rem;">
+      <thead><tr style="background:var(--cream);">
+        <th style="padding:11px;text-align:left;color:var(--dark-earth);">Name</th>
+        <th style="padding:11px;text-align:left;color:var(--dark-earth);">Email</th>
+        <th style="padding:11px;text-align:left;color:var(--dark-earth);">Phone</th>
+        <th style="padding:11px;text-align:left;color:var(--dark-earth);">Joined</th>
+        <th style="padding:11px;text-align:left;color:var(--dark-earth);">Orders</th>
+      </tr></thead>
+      <tbody>${customers.map(c=>{
+        const cnt=orders.filter(o=>o.userId===c.uid).length;
+        return `<tr style="border-top:1px solid var(--sand);">
+          <td style="padding:11px;">${c.name||'—'}</td>
+          <td style="padding:11px;color:#7a6a50;">${c.email}</td>
+          <td style="padding:11px;color:#7a6a50;">${c.phone||'—'}</td>
+          <td style="padding:11px;color:#7a6a50;">${c.joinedAt||'—'}</td>
+          <td style="padding:11px;"><span style="background:var(--light-sage);color:var(--moss);padding:3px 10px;border-radius:20px;">${cnt}</span></td>
+        </tr>`;}).join('')}
+      </tbody></table></div>`;
+  }catch(e){list.innerHTML='<p style="color:#7a6a50;">Error loading customers.</p>';}
+}
+
+// ============ OFFERS & SALES ============
+function renderAdminOffers(){
+  const products=loadProducts();
+  const list=document.getElementById('admin-offers-list');
+  list.innerHTML=products.map(p=>`
+    <div style="display:flex;align-items:center;gap:14px;background:var(--warm-white);border:1px solid var(--sand);border-radius:10px;padding:12px 16px;margin-bottom:10px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:140px;">
+        <strong style="color:var(--dark-earth);">${p.name}</strong>
+        <div style="font-size:0.82rem;color:#7a6a50;">₹${Number(p.price).toLocaleString('en-IN')} ${p.offer?`<span style="background:#e74c3c;color:white;padding:2px 8px;border-radius:10px;margin-left:6px;">${p.offer}% OFF</span>`:'— No offer'}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <input type="number" placeholder="Discount %" min="0" max="90" value="${p.offer||''}" id="offer-${p.id}" style="width:110px;padding:7px 10px;border:1.5px solid var(--sand);border-radius:4px;font-family:'Crimson Pro',serif;font-size:0.9rem;"/>
+        <button onclick="applyOffer('${p.id}')" style="background:var(--clay);color:white;border:none;padding:7px 14px;border-radius:4px;font-family:'Crimson Pro',serif;cursor:pointer;font-size:0.86rem;">Apply 🎉</button>
+        ${p.offer?`<button onclick="removeOffer('${p.id}')" style="background:#aaa;color:white;border:none;padding:7px 12px;border-radius:4px;font-family:'Crimson Pro',serif;cursor:pointer;font-size:0.86rem;">Remove</button>`:''}
+      </div>
+    </div>`).join('');
+}
+
+function applyOffer(id){
+  const val=document.getElementById('offer-'+id).value;
+  const discount=parseInt(val);
+  if(!val||isNaN(discount)||discount<1||discount>90){showToast('Enter a valid discount between 1–90%!');return;}
+  const products=loadProducts();
+  const idx=products.findIndex(p=>p.id===id);
+  if(idx>-1){products[idx].offer=discount;saveProducts(products);renderShop();renderAdminOffers();showToast(`${discount}% offer applied! 🎉`);}
+}
+
+function removeOffer(id){
+  const products=loadProducts();
+  const idx=products.findIndex(p=>p.id===id);
+  if(idx>-1){delete products[idx].offer;saveProducts(products);renderShop();renderAdminOffers();showToast('Offer removed.');}
+}
+
+// ============ PRODUCTS ============
+function renderAdminList(){
+  const products=loadProducts();
+  const container=document.getElementById('admin-products-list');
+  if(!products.length){container.innerHTML='<p style="color:#7a6a50;">No products yet.</p>';return;}
+  container.innerHTML=products.map(p=>`
+    <div style="display:flex;align-items:center;gap:14px;background:var(--warm-white);border:1px solid var(--sand);border-radius:10px;padding:12px 16px;margin-bottom:10px;flex-wrap:wrap;">
+      <div style="width:52px;height:52px;border-radius:8px;overflow:hidden;background:var(--sand);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        ${p.image?`<img src="${p.image}" style="width:100%;height:100%;object-fit:cover;"/>`:`<span style="font-size:1.5rem;">${CATEGORY_ICONS[p.category]||'🎨'}</span>`}
+      </div>
+      <div style="flex:1;min-width:130px;">
+        <strong style="font-family:'Playfair Display',serif;color:var(--dark-earth);font-size:0.98rem;">${p.name}</strong>
+        <div style="font-size:0.82rem;color:#7a6a50;">${p.category} · ₹${Number(p.price).toLocaleString('en-IN')}${p.offer?` · <span style="color:#e74c3c;">${p.offer}% OFF</span>`:''}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="openEditModal('${p.id}')" style="background:var(--earth);color:white;border:none;padding:7px 13px;border-radius:4px;font-family:'Crimson Pro',serif;cursor:pointer;font-size:0.86rem;">✏️ Edit</button>
+        <button onclick="toggleSoldOut('${p.id}')" class="toggle-sold" style="background:${p.soldOut?'#e8f5e9':'#fff3cd'};color:${p.soldOut?'#155724':'#856404'};">${p.soldOut?'✅ In Stock':'🔴 Sold Out'}</button>
+        <button onclick="deleteProduct('${p.id}')" class="btn-danger" style="border-radius:4px;padding:7px 11px;">🗑️</button>
+      </div>
+    </div>`).join('');
+}
+
+function previewNewImage(input){const r=new FileReader();r.onload=e=>{document.getElementById('new-preview-img').src=e.target.result;document.getElementById('new-image-preview').style.display='block';};if(input.files[0])r.readAsDataURL(input.files[0]);}
+function previewEditImage(input){const r=new FileReader();r.onload=e=>{const img=document.getElementById('edit-preview-img');img.src=e.target.result;img.style.display='block';};if(input.files[0])r.readAsDataURL(input.files[0]);}
+function fileToBase64(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});}
+
+async function addProduct(){
+  const name=document.getElementById('new-name').value.trim();
+  const price=document.getElementById('new-price').value.trim();
+  if(!name||!price){showToast('Please enter product name and price!');return;}
+  const category=document.getElementById('new-category').value;
+  const desc=document.getElementById('new-desc').value.trim();
+  const imageFile=document.getElementById('new-image').files[0];
+  let image='';if(imageFile)image=await fileToBase64(imageFile);
+  const products=loadProducts();
+  products.push({id:'p'+Date.now(),name,price,category,desc,image,soldOut:false});
+  saveProducts(products);renderShop();renderAdminList();renderAdminOffers();
+  ['new-name','new-price','new-desc','new-image'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('new-image-preview').style.display='none';
+  showToast('Product added! 🎨');
+}
+
+function openEditModal(id){
+  const p=loadProducts().find(x=>x.id===id);if(!p)return;
+  document.getElementById('edit-id').value=id;
+  document.getElementById('edit-name').value=p.name;
+  document.getElementById('edit-price').value=p.price;
+  document.getElementById('edit-category').value=p.category;
+  document.getElementById('edit-desc').value=p.desc;
+  const img=document.getElementById('edit-preview-img');
+  img.src=p.image||'';img.style.display=p.image?'block':'none';
+  document.getElementById('edit-image').value='';
+  openM('edit-modal');
+}
+
+async function saveEdit(){
+  const id=document.getElementById('edit-id').value;
+  const name=document.getElementById('edit-name').value.trim();
+  const price=document.getElementById('edit-price').value.trim();
+  if(!name||!price){showToast('Name and price required!');return;}
+  const category=document.getElementById('edit-category').value;
+  const desc=document.getElementById('edit-desc').value.trim();
+  const imageFile=document.getElementById('edit-image').files[0];
+  const products=loadProducts();const idx=products.findIndex(x=>x.id===id);if(idx===-1)return;
+  let image=products[idx].image;if(imageFile)image=await fileToBase64(imageFile);
+  products[idx]={...products[idx],id,name,price,category,desc,image};
+  saveProducts(products);renderShop();renderAdminList();closeM('edit-modal');showToast('Product updated ✅');
+}
+
+function deleteProduct(id){
+  if(!confirm('Delete this product?'))return;
+  saveProducts(loadProducts().filter(p=>p.id!==id));renderShop();renderAdminList();showToast('Product deleted.');
+}
+
+function toggleSoldOut(id){
+  const products=loadProducts();const idx=products.findIndex(p=>p.id===id);
+  if(idx>-1){products[idx].soldOut=!products[idx].soldOut;saveProducts(products);filterProducts();renderAdminList();showToast(products[idx].soldOut?'Marked Sold Out 🔴':'Marked In Stock ✅');}
+}
+
+// ============ FAQ ============
+function toggleFaq(btn){
+  const ans=btn.nextElementSibling;const isOpen=ans.classList.contains('open');
+  document.querySelectorAll('.faq-a').forEach(a=>a.classList.remove('open'));
+  document.querySelectorAll('.faq-q').forEach(b=>b.classList.remove('open'));
+  if(!isOpen){ans.classList.add('open');btn.classList.add('open');}
+}
+
+// ============ REVIEWS ============
+function loadReviews(){try{const v=localStorage.getItem('artnest_reviews');return v?JSON.parse(v):[];}catch{return[];}}
+function saveReviews(r){try{localStorage.setItem('artnest_reviews',JSON.stringify(r));}catch{}}
+function openReviewModal(){const user=getCurrentUser();if(user){document.getElementById('rev-name').value=user.name||'';}openM('review-modal');}
+function submitReview(){
+  const name=document.getElementById('rev-name').value.trim();
+  const product=document.getElementById('rev-product').value.trim();
+  const rating=document.getElementById('rev-rating').value;
+  const text=document.getElementById('rev-text').value.trim();
+  if(!name||!text){showToast('Please enter your name and review!');return;}
+  const reviews=loadReviews();
+  reviews.push({id:'r'+Date.now(),name,product,rating:Number(rating),text,date:new Date().toLocaleDateString('en-IN')});
+  saveReviews(reviews);renderCustomerReviews();closeM('review-modal');
+  document.getElementById('rev-name').value='';document.getElementById('rev-product').value='';document.getElementById('rev-text').value='';
+  showToast('Thank you for your review! 🌿');
+}
+function renderCustomerReviews(){
+  const reviews=loadReviews().reverse();const list=document.getElementById('customer-reviews-list');if(!list)return;
+  if(!reviews.length){list.innerHTML='';return;}
+  list.innerHTML='<div class="reviews-grid">'+reviews.map(r=>`
+    <div class="review-card"><div class="review-stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
+    <p class="review-text">"${r.text}"</p>
+    <div class="review-author"><div class="review-avatar">👤</div><div><div class="review-name">${r.name}</div><div class="review-product">${r.product||'The Art Nest'} · ${r.date}</div></div></div>
+    </div>`).join('')+'</div>';
+}
+
+// ============ BACK TO TOP ============
+window.addEventListener('scroll',()=>{
+  const btn=document.getElementById('back-to-top');
+  if(btn)btn.classList.toggle('visible',window.scrollY>400);
+});
+
+// ============ SPLASH ============
+window.addEventListener('load',()=>{
+  setTimeout(()=>{const s=document.getElementById('splash');if(s){s.classList.add('hidden');setTimeout(()=>s.remove(),700);}},1400);
+});
+
+// ============ EMAILJS ============
+function initEmailJS(){if(EMAILJS_PUBLIC_KEY&&EMAILJS_PUBLIC_KEY!=='YOUR_PUBLIC_KEY')emailjs.init(EMAILJS_PUBLIC_KEY);}
+
+// ============ INIT ============
+initEmailJS();
+renderShop();
+renderCustomerReviews();
+document.querySelectorAll('.category-card').forEach(el=>{
+  el.style.animationPlayState='paused';
+  new IntersectionObserver(([e])=>{if(e.isIntersecting)el.style.animationPlayState='running';},{threshold:0.1}).observe(el);
+});
+</script>
+</body>
+</html>
