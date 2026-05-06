@@ -495,7 +495,7 @@
     <div id="auth-login">
       <h3>Welcome back 🌿</h3>
       <div class="form-group"><label>Email</label><input type="email" id="login-email" placeholder="your@email.com"/></div>
-      <div class="form-group"><label>Password</label><input type="password" id="login-pass" placeholder="Your password" onkeydown="if(event.key==='Enter')customerLogin()"/></div>
+      <div class="form-group"><label>Password</label><div style="position:relative;"><input type="password" id="login-pass" placeholder="Your password" onkeydown="if(event.key==='Enter')customerLogin()" style="width:100%;padding-right:44px;"/><button type="button" onclick="const i=document.getElementById('login-pass');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁️':'🙈';" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1rem;">👁️</button></div></div>
       <button class="btn-primary" style="width:100%;margin-top:4px;" onclick="customerLogin()">Login</button>
       <p style="text-align:center;margin-top:10px;font-size:0.88rem;"><a href="#" onclick="forgotPassword();return false;" style="color:var(--clay);">Forgot password?</a></p>
       <p style="text-align:center;margin-top:8px;font-size:0.9rem;color:#7a6a50;">No account? <a href="#" onclick="switchAuthTab('signup');return false;" style="color:var(--clay);">Sign up</a></p>
@@ -505,7 +505,7 @@
       <div class="form-group"><label>Full Name</label><input type="text" id="signup-name" placeholder="Your full name"/></div>
       <div class="form-group"><label>Email</label><input type="email" id="signup-email" placeholder="your@email.com"/></div>
       <div class="form-group"><label>Phone</label><input type="text" id="signup-phone" placeholder="+91 XXXXX XXXXX"/></div>
-      <div class="form-group"><label>Password</label><input type="password" id="signup-pass" placeholder="Create a password"/></div>
+      <div class="form-group"><label>Password</label><div style="position:relative;"><input type="password" id="signup-pass" placeholder="Create a password" style="width:100%;padding-right:44px;"/><button type="button" onclick="const i=document.getElementById('signup-pass');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁️':'🙈';" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1rem;">👁️</button></div></div>
       <button class="btn-primary" style="width:100%;margin-top:4px;" onclick="customerSignup()">Create Account</button>
       <p style="text-align:center;margin-top:12px;font-size:0.9rem;color:#7a6a50;">Have account? <a href="#" onclick="switchAuthTab('login');return false;" style="color:var(--clay);">Login</a></p>
     </div>
@@ -550,10 +550,10 @@
   <div class="modal" style="max-width:400px;">
     <button class="modal-close" onclick="closeM('admin-login-modal')">×</button>
     <h3>🔐 Admin Login</h3>
-    <p style="color:#7a6a50;margin-bottom:16px;font-size:0.95rem;">Enter your admin password to access the dashboard.</p>
-    <div class="form-group"><label>Password</label><input type="password" id="admin-pass" placeholder="Admin password" onkeydown="if(event.key==='Enter')adminLogin()"/></div>
+    <p style="color:#7a6a50;margin-bottom:16px;font-size:0.95rem;">Enter your admin credentials to access the dashboard.</p>
+    <div class="form-group"><label>Email</label><input type="email" id="admin-pass-email" placeholder="Admin email" value="aayushi.ioie@gmail.com"/></div>
+    <div class="form-group"><label>Password</label><div style="position:relative;"><input type="password" id="admin-pass" placeholder="Admin password" onkeydown="if(event.key==='Enter')adminLogin()" style="width:100%;padding-right:44px;"/><button type="button" onclick="const i=document.getElementById('admin-pass');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁️':'🙈';" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1rem;">👁️</button></div></div>
     <button class="btn-primary" style="width:100%;" onclick="adminLogin()">Login as Admin</button>
-    <p style="margin-top:10px;font-size:0.78rem;color:#aaa;text-align:center;">Default: <strong>artnest123</strong></p>
   </div>
 </div>
 
