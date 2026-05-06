@@ -1415,6 +1415,28 @@ function previewNewImage(input){const r=new FileReader();r.onload=e=>{document.g
 function previewEditImage(input){const r=new FileReader();r.onload=e=>{const img=document.getElementById('edit-preview-img');img.src=e.target.result;img.style.display='block';};if(input.files[0])r.readAsDataURL(input.files[0]);}
 function fileToBase64(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});}
 
+// Compress image before saving to Firestore (max 800px, quality 0.7)
+function compressImage(file){
+  return new Promise((res)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        const canvas=document.createElement('canvas');
+        const MAX=800;
+        let w=img.width,h=img.height;
+        if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}
+        if(h>MAX){w=Math.round(w*MAX/h);h=MAX;}
+        canvas.width=w;canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        res(canvas.toDataURL('image/jpeg',0.7));
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 async function addProduct(){
   const name=document.getElementById('new-name').value.trim();
   const price=document.getElementById('new-price').value.trim();
@@ -1422,7 +1444,7 @@ async function addProduct(){
   const category=document.getElementById('new-category').value;
   const desc=document.getElementById('new-desc').value.trim();
   const imageFile=document.getElementById('new-image').files[0];
-  let image='';if(imageFile)image=await fileToBase64(imageFile);
+  let image='';if(imageFile){showToast('Compressing image... ⏳');image=await compressImage(imageFile);}
   showToast('Adding product... ⏳');
   const newId = await saveProductToDB({name,price,category,desc,image,soldOut:false});
   if(!newId){return;} // error already shown by saveProductToDB
@@ -1454,7 +1476,7 @@ async function saveEdit(){
   const desc=document.getElementById('edit-desc').value.trim();
   const imageFile=document.getElementById('edit-image').files[0];
   const products=loadProducts();const idx=products.findIndex(x=>x.id===id);if(idx===-1)return;
-  let image=products[idx].image;if(imageFile)image=await fileToBase64(imageFile);
+  let image=products[idx].image;if(imageFile){showToast('Compressing image... ⏳');image=await compressImage(imageFile);}
   showToast('Updating... ⏳');
   await updateProductInDB(id,{name,price,category,desc,image});
   await renderShop();renderAdminList();closeM('edit-modal');showToast('Product updated ✅');
