@@ -1080,9 +1080,11 @@ async function adminLogin(){
   const email=document.getElementById('admin-pass-email').value.trim();
   const pass=document.getElementById('admin-pass').value;
   if(!email||!pass){showToast('Enter email and password!');return;}
+  if(!window._fb){showToast('Firebase not loaded yet, please wait...');return;}
+  showToast('Logging in... ⏳');
   try{
-    const cred=await fb().signInWithEmailAndPassword(fbAuth(),email,pass);
-    const snap=await fb().getDoc(fb().doc(fbDb(),'customers',cred.user.uid));
+    const cred=await window._fb.signInWithEmailAndPassword(window._fb.auth,email,pass);
+    const snap=await window._fb.getDoc(window._fb.doc(window._fb.db,'customers',cred.user.uid));
     if(snap.exists()&&snap.data().role==='admin'){
       window._isAdmin=true;
       closeM('admin-login-modal');
@@ -1090,16 +1092,24 @@ async function adminLogin(){
       document.getElementById('fab-admin').textContent='🛒 Dashboard';
       document.getElementById('admin-pass').value='';
       document.getElementById('admin-pass-email').value='';
+      showToast('Welcome Admin! 🎨');
       renderAdminOrders();renderAdminMessages();renderAdminList();renderAdminCustomers();renderAdminOffers();
       document.getElementById('admin-panel').scrollIntoView({behavior:'smooth'});
     } else {
-      await fb().signOut(fbAuth());
-      showToast('You are not an admin!');
+      await window._fb.signOut(window._fb.auth);
+      showToast('Access denied — not an admin account!');
     }
   }catch(e){
+    console.error('Admin login error:',e.code, e.message);
+    let msg='Login failed!';
+    if(e.code==='auth/wrong-password'||e.code==='auth/invalid-credential')msg='Wrong password! Try again.';
+    else if(e.code==='auth/user-not-found')msg='Email not found!';
+    else if(e.code==='auth/too-many-requests')msg='Too many attempts. Try later.';
+    else if(e.code==='auth/network-request-failed')msg='Network error. Check connection.';
+    showToast(msg);
     const inp=document.getElementById('admin-pass');
-    inp.style.borderColor='#c0392b';inp.value='';inp.placeholder='Wrong credentials!';
-    setTimeout(()=>{inp.style.borderColor='';inp.placeholder='Admin password';},2000);
+    inp.style.borderColor='#c0392b';
+    setTimeout(()=>{inp.style.borderColor='';},3000);
   }
 }
 
