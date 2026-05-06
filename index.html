@@ -714,11 +714,16 @@ async function seedDefaultProducts() {
 }
 
 async function saveProductToDB(product) {
+  if(!window._fb){showToast('Firebase not ready! Please wait and try again.');return null;}
   try {
     const {db, collection, addDoc, serverTimestamp} = window._fb;
     const ref = await addDoc(collection(db, 'products'), {...product, createdAt: serverTimestamp()});
     return ref.id;
-  } catch(e) { return null; }
+  } catch(e) {
+    console.error('Save product error:', e);
+    showToast('Error saving product: ' + e.message);
+    return null;
+  }
 }
 
 async function updateProductInDB(id, data) {
@@ -1026,8 +1031,9 @@ async function placeOrder(){
   const p=_orderProduct;
   const finalPrice=p.offer?Math.round(Number(p.price)*(1-p.offer/100)):Number(p.price);
   if(!RAZORPAY_KEY||RAZORPAY_KEY==='YOUR_RAZORPAY_KEY_ID'){
-    await saveOrderToFirestore(user,p,address,note,finalPrice,'Demo','demo_'+Date.now());
-    closeM('order-modal');showToast('Order placed! (Demo mode) ✅');openAccountModal();return;
+    const ok=await saveOrderToFirestore(user,p,address,note,finalPrice,'Demo','demo_'+Date.now());
+    if(ok){closeM('order-modal');showToast('Order placed! ✅');openAccountModal();}
+    return;
   }
   const opts={
     key:RAZORPAY_KEY,amount:finalPrice*100,currency:'INR',
@@ -1035,23 +1041,30 @@ async function placeOrder(){
     prefill:{name:user.name,email:user.email,contact:user.phone||''},
     theme:{color:'#5c4a1e'},
     handler:async function(res){
-      await saveOrderToFirestore(user,p,address,note,finalPrice,'Paid',res.razorpay_payment_id);
-      closeM('order-modal');showToast('Payment successful! 🎉');openAccountModal();
+      const ok=await saveOrderToFirestore(user,p,address,note,finalPrice,'Paid',res.razorpay_payment_id);
+      if(ok){closeM('order-modal');showToast('Payment successful! 🎉');openAccountModal();}
+      else{showToast('Payment received but order save failed! Contact us on WhatsApp.');}
     },
     modal:{ondismiss:function(){showToast('Payment cancelled.');}}
   };
-  try{new Razorpay(opts).open();}catch(e){showToast('Razorpay not loaded.');}
+  try{new Razorpay(opts).open();}catch(e){showToast('Payment gateway error. Try again or pay via UPI.');}
 }
 
 async function saveOrderToFirestore(user,p,address,note,amount,paymentStatus,paymentId){
+  if(!window._fb){showToast('Connection error! Please refresh and try again.');return false;}
   try{
-    await fb().addDoc(fb().collection(fbDb(),'orders'),{
+    await window._fb.addDoc(window._fb.collection(window._fb.db,'orders'),{
       userId:user.uid,userName:user.name||user.email,userEmail:user.email,userPhone:user.phone||'—',
       productId:p.id,productName:p.name,category:p.category,amount:String(amount),address,note,
       paymentStatus,paymentId,status:'pending',date:new Date().toLocaleString('en-IN'),
-      createdAt:fb().serverTimestamp()
+      createdAt:window._fb.serverTimestamp()
     });
-  }catch(e){console.error(e);}
+    return true;
+  }catch(e){
+    console.error('Order save error:',e);
+    showToast('Order could not be saved: '+e.message);
+    return false;
+  }
 }
 
 // ============ CONTACT MESSAGE ============
@@ -1061,13 +1074,17 @@ async function sendContactMessage(){
   const subject=document.getElementById('cf-subject').value.trim();
   const message=document.getElementById('cf-message').value.trim();
   if(!name||!email||!message){showToast('Please fill in name, email and message!');return;}
+  if(!window._fb){showToast('Connection error! Please refresh and try again.');return;}
   try{
-    await fb().addDoc(fb().collection(fbDb(),'messages'),{
-      name,email,subject,message,date:new Date().toLocaleString('en-IN'),read:false,createdAt:fb().serverTimestamp()
+    await window._fb.addDoc(window._fb.collection(window._fb.db,'messages'),{
+      name,email,subject,message,date:new Date().toLocaleString('en-IN'),read:false,createdAt:window._fb.serverTimestamp()
     });
-  }catch(e){}
-  ['cf-name','cf-email','cf-subject','cf-message'].forEach(id=>document.getElementById(id).value='');
-  showToast(`Message sent! We'll get back to you soon 🌿`);
+    ['cf-name','cf-email','cf-subject','cf-message'].forEach(id=>document.getElementById(id).value='');
+    showToast(`Message sent! We'll get back to you soon 🌿`);
+  }catch(e){
+    console.error('Message error:',e);
+    showToast('Could not send message. Please try WhatsApp instead!');
+  }
 }
 
 // ============ ADMIN ============
@@ -1303,7 +1320,8 @@ async function addProduct(){
   const imageFile=document.getElementById('new-image').files[0];
   let image='';if(imageFile)image=await fileToBase64(imageFile);
   showToast('Adding product... ⏳');
-  await saveProductToDB({name,price,category,desc,image,soldOut:false});
+  const newId = await saveProductToDB({name,price,category,desc,image,soldOut:false});
+  if(!newId){return;} // error already shown by saveProductToDB
   await renderShop();renderAdminList();renderAdminOffers();
   ['new-name','new-price','new-desc','new-image'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('new-image-preview').style.display='none';
@@ -1362,20 +1380,52 @@ function toggleFaq(btn){
 }
 
 // ============ REVIEWS ============
-function openReviewModal(){const user=getCurrentUser();if(user){document.getElementById('rev-name').value=user.name||'';}openM('review-modal');}
+async function openReviewModal(){
+  const user=getCurrentUser();
+  if(!user){showToast('Please login to write a review! 👤');switchAuthTab('login');openM('auth-modal');return;}
+  // Check if user has placed any order
+  try{
+    const {db,collection,query,where,getDocs}=window._fb;
+    const q=query(collection(db,'orders'),where('userId','==',user.uid));
+    const snap=await getDocs(q);
+    if(snap.empty){showToast('Only customers who have placed an order can write a review! 🛍️');return;}
+    // Check if already reviewed
+    const rq=query(collection(db,'reviews'),where('userId','==',user.uid));
+    const rsnap=await getDocs(rq);
+    if(!rsnap.empty){showToast('You have already submitted a review! Thank you 🌿');return;}
+    document.getElementById('rev-name').value=user.name||'';
+    openM('review-modal');
+  }catch(e){
+    // If check fails, still allow review
+    document.getElementById('rev-name').value=user.name||'';
+    openM('review-modal');
+  }
+}
+
 async function submitReview(){
+  const user=getCurrentUser();
+  if(!user){showToast('Please login first!');return;}
   const name=document.getElementById('rev-name').value.trim();
   const product=document.getElementById('rev-product').value.trim();
   const rating=document.getElementById('rev-rating').value;
   const text=document.getElementById('rev-text').value.trim();
   if(!name||!text){showToast('Please enter your name and review!');return;}
+  if(!window._fb){showToast('Connection error! Please refresh.');return;}
   try{
     const {db,collection,addDoc,serverTimestamp}=window._fb;
-    await addDoc(collection(db,'reviews'),{name,product,rating:Number(rating),text,date:new Date().toLocaleDateString('en-IN'),createdAt:serverTimestamp()});
-  }catch(e){console.error(e);}
-  await renderCustomerReviews();closeM('review-modal');
-  document.getElementById('rev-name').value='';document.getElementById('rev-product').value='';document.getElementById('rev-text').value='';
-  showToast('Thank you for your review! 🌿');
+    await addDoc(collection(db,'reviews'),{
+      userId:user.uid,
+      name,product,rating:Number(rating),text,
+      date:new Date().toLocaleDateString('en-IN'),
+      createdAt:serverTimestamp()
+    });
+    await renderCustomerReviews();closeM('review-modal');
+    document.getElementById('rev-name').value='';document.getElementById('rev-product').value='';document.getElementById('rev-text').value='';
+    showToast('Thank you for your review! 🌿');
+  }catch(e){
+    console.error(e);
+    showToast('Could not submit review. Please try again!');
+  }
 }
 async function renderCustomerReviews(){
   const list=document.getElementById('customer-reviews-list');if(!list)return;
