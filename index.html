@@ -685,8 +685,58 @@ function isAdmin(){return window._isAdmin===true;}
 // LS fallback for products (images are too large for Firestore)
 function lsGet(k,d=null){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
-const loadProducts=()=>lsGet('artnest_products',DEFAULT_PRODUCTS);
-const saveProducts=p=>lsSet('artnest_products',p);
+// ============ FIRESTORE PRODUCTS ============
+let _cachedProducts = null;
+
+async function loadProductsFromDB() {
+  try {
+    const {db, collection, getDocs, orderBy, query} = window._fb;
+    const snap = await getDocs(query(collection(db, 'products'), orderBy('createdAt', 'desc')));
+    if (snap.empty) {
+      // First time - seed default products
+      await seedDefaultProducts();
+      return DEFAULT_PRODUCTS;
+    }
+    _cachedProducts = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    return _cachedProducts;
+  } catch(e) {
+    return DEFAULT_PRODUCTS;
+  }
+}
+
+async function seedDefaultProducts() {
+  try {
+    const {db, collection, addDoc, serverTimestamp} = window._fb;
+    for (const p of DEFAULT_PRODUCTS) {
+      await addDoc(collection(db, 'products'), {...p, createdAt: serverTimestamp()});
+    }
+  } catch(e) {}
+}
+
+async function saveProductToDB(product) {
+  try {
+    const {db, collection, addDoc, serverTimestamp} = window._fb;
+    const ref = await addDoc(collection(db, 'products'), {...product, createdAt: serverTimestamp()});
+    return ref.id;
+  } catch(e) { return null; }
+}
+
+async function updateProductInDB(id, data) {
+  try {
+    const {db, doc, updateDoc} = window._fb;
+    await updateDoc(doc(db, 'products', id), data);
+  } catch(e) {}
+}
+
+async function deleteProductFromDB(id) {
+  try {
+    const {db, doc, deleteDoc} = window._fb;
+    await deleteDoc(doc(db, 'products', id));
+  } catch(e) {}
+}
+
+const loadProducts = () => _cachedProducts || DEFAULT_PRODUCTS;
+const saveProducts = () => {}; // no-op, we use Firestore now
 
 // ============ TOAST ============
 function showToast(msg,dur=3200){
@@ -859,16 +909,29 @@ async function openAccountModal(){
     const snap=await fb().getDocs(q);
     const orders=snap.docs.map(d=>({id:d.id,...d.data()}));
     if(!orders.length){list.innerHTML='<p style="color:#7a6a50;font-size:0.95rem;">No orders yet. Start shopping! 🛍️</p>';return;}
-    list.innerHTML=orders.map(o=>`
-      <div class="order-card">
+    list.innerHTML=orders.map(o=>{
+      const steps=['pending','confirmed','paid','delivered'];
+      const icons=['🕐','✅','💳','🚚'];
+      const labels=['Order Placed','Confirmed','Payment Done','Delivered'];
+      const curStep=steps.indexOf(o.status||'pending');
+      const tracker=`<div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 4px;position:relative;">
+        <div style="position:absolute;top:16px;left:0;right:0;height:2px;background:var(--sand);z-index:0;"></div>
+        <div style="position:absolute;top:16px;left:0;height:2px;background:var(--clay);z-index:1;width:${curStep===0?'0%':curStep===1?'33%':curStep===2?'66%':'100%'};transition:width 0.5s;"></div>
+        ${steps.map((s,i)=>`<div style="display:flex;flex-direction:column;align-items:center;z-index:2;gap:4px;">
+          <div style="width:32px;height:32px;border-radius:50%;background:${i<=curStep?'var(--clay)':'var(--sand)'};color:${i<=curStep?'white':'#aaa'};display:flex;align-items:center;justify-content:center;font-size:0.9rem;">${icons[i]}</div>
+          <span style="font-size:0.65rem;color:${i<=curStep?'var(--clay)':'#aaa'};text-align:center;width:60px;line-height:1.2;">${labels[i]}</span>
+        </div>`).join('')}
+      </div>`;
+      return `<div class="order-card">
         <div class="order-card-header">
           <div><strong style="color:var(--dark-earth);">${o.productName}</strong><br><span style="font-size:0.82rem;color:#9a8a70;">${o.date||''}</span></div>
           <span class="order-status status-${o.status||'pending'}">${o.status||'Pending'}</span>
         </div>
-        <p style="font-size:0.88rem;color:#5a4a30;">💰 ₹${Number(o.amount).toLocaleString('en-IN')} &nbsp;|&nbsp; 📍 ${o.address}</p>
+        ${tracker}
+        <p style="font-size:0.88rem;color:#5a4a30;margin-top:8px;">💰 ₹${Number(o.amount).toLocaleString('en-IN')} &nbsp;|&nbsp; 📍 ${o.address}</p>
         ${o.note?`<p style="font-size:0.82rem;color:#7a6a50;margin-top:4px;">📝 ${o.note}</p>`:''}
         <p style="font-size:0.8rem;color:${o.paymentStatus==='Paid'?'#155724':'var(--clay)'};margin-top:5px;">💳 ${o.paymentStatus}</p>
-      </div>`).join('');
+      </div>`;}).join('');
   } catch(e){list.innerHTML='<p style="color:#7a6a50;">Could not load orders.</p>';}
 }
 
@@ -911,7 +974,10 @@ function filterProducts(){
   // Show active offers banner
   renderOffersBanner();
 }
-function renderShop(){filterProducts();}
+async function renderShop(){
+  if(window._fb){_cachedProducts=await loadProductsFromDB();}
+  filterProducts();
+}
 
 // ============ OFFERS BANNER ============
 function renderOffersBanner(){
@@ -1179,19 +1245,17 @@ function renderAdminOffers(){
     </div>`).join('');
 }
 
-function applyOffer(id){
+async function applyOffer(id){
   const val=document.getElementById('offer-'+id).value;
   const discount=parseInt(val);
   if(!val||isNaN(discount)||discount<1||discount>90){showToast('Enter a valid discount between 1–90%!');return;}
-  const products=loadProducts();
-  const idx=products.findIndex(p=>p.id===id);
-  if(idx>-1){products[idx].offer=discount;saveProducts(products);renderShop();renderAdminOffers();showToast(`${discount}% offer applied! 🎉`);}
+  await updateProductInDB(id,{offer:discount});
+  await renderShop();renderAdminOffers();showToast(`${discount}% offer applied! 🎉`);
 }
 
-function removeOffer(id){
-  const products=loadProducts();
-  const idx=products.findIndex(p=>p.id===id);
-  if(idx>-1){delete products[idx].offer;saveProducts(products);renderShop();renderAdminOffers();showToast('Offer removed.');}
+async function removeOffer(id){
+  await updateProductInDB(id,{offer:null});
+  await renderShop();renderAdminOffers();showToast('Offer removed.');
 }
 
 // ============ PRODUCTS ============
@@ -1228,9 +1292,9 @@ async function addProduct(){
   const desc=document.getElementById('new-desc').value.trim();
   const imageFile=document.getElementById('new-image').files[0];
   let image='';if(imageFile)image=await fileToBase64(imageFile);
-  const products=loadProducts();
-  products.push({id:'p'+Date.now(),name,price,category,desc,image,soldOut:false});
-  saveProducts(products);renderShop();renderAdminList();renderAdminOffers();
+  showToast('Adding product... ⏳');
+  await saveProductToDB({name,price,category,desc,image,soldOut:false});
+  await renderShop();renderAdminList();renderAdminOffers();
   ['new-name','new-price','new-desc','new-image'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('new-image-preview').style.display='none';
   showToast('Product added! 🎨');
@@ -1259,18 +1323,24 @@ async function saveEdit(){
   const imageFile=document.getElementById('edit-image').files[0];
   const products=loadProducts();const idx=products.findIndex(x=>x.id===id);if(idx===-1)return;
   let image=products[idx].image;if(imageFile)image=await fileToBase64(imageFile);
-  products[idx]={...products[idx],id,name,price,category,desc,image};
-  saveProducts(products);renderShop();renderAdminList();closeM('edit-modal');showToast('Product updated ✅');
+  showToast('Updating... ⏳');
+  await updateProductInDB(id,{name,price,category,desc,image});
+  await renderShop();renderAdminList();closeM('edit-modal');showToast('Product updated ✅');
 }
 
-function deleteProduct(id){
+async function deleteProduct(id){
   if(!confirm('Delete this product?'))return;
-  saveProducts(loadProducts().filter(p=>p.id!==id));renderShop();renderAdminList();showToast('Product deleted.');
+  await deleteProductFromDB(id);
+  await renderShop();renderAdminList();showToast('Product deleted.');
 }
 
-function toggleSoldOut(id){
+async function toggleSoldOut(id){
   const products=loadProducts();const idx=products.findIndex(p=>p.id===id);
-  if(idx>-1){products[idx].soldOut=!products[idx].soldOut;saveProducts(products);filterProducts();renderAdminList();showToast(products[idx].soldOut?'Marked Sold Out 🔴':'Marked In Stock ✅');}
+  if(idx>-1){
+    const newVal=!products[idx].soldOut;
+    await updateProductInDB(id,{soldOut:newVal});
+    await renderShop();renderAdminList();showToast(newVal?'Marked Sold Out 🔴':'Marked In Stock ✅');
+  }
 }
 
 // ============ FAQ ============
@@ -1282,29 +1352,34 @@ function toggleFaq(btn){
 }
 
 // ============ REVIEWS ============
-function loadReviews(){try{const v=localStorage.getItem('artnest_reviews');return v?JSON.parse(v):[];}catch{return[];}}
-function saveReviews(r){try{localStorage.setItem('artnest_reviews',JSON.stringify(r));}catch{}}
 function openReviewModal(){const user=getCurrentUser();if(user){document.getElementById('rev-name').value=user.name||'';}openM('review-modal');}
-function submitReview(){
+async function submitReview(){
   const name=document.getElementById('rev-name').value.trim();
   const product=document.getElementById('rev-product').value.trim();
   const rating=document.getElementById('rev-rating').value;
   const text=document.getElementById('rev-text').value.trim();
   if(!name||!text){showToast('Please enter your name and review!');return;}
-  const reviews=loadReviews();
-  reviews.push({id:'r'+Date.now(),name,product,rating:Number(rating),text,date:new Date().toLocaleDateString('en-IN')});
-  saveReviews(reviews);renderCustomerReviews();closeM('review-modal');
+  try{
+    const {db,collection,addDoc,serverTimestamp}=window._fb;
+    await addDoc(collection(db,'reviews'),{name,product,rating:Number(rating),text,date:new Date().toLocaleDateString('en-IN'),createdAt:serverTimestamp()});
+  }catch(e){console.error(e);}
+  await renderCustomerReviews();closeM('review-modal');
   document.getElementById('rev-name').value='';document.getElementById('rev-product').value='';document.getElementById('rev-text').value='';
   showToast('Thank you for your review! 🌿');
 }
-function renderCustomerReviews(){
-  const reviews=loadReviews().reverse();const list=document.getElementById('customer-reviews-list');if(!list)return;
-  if(!reviews.length){list.innerHTML='';return;}
-  list.innerHTML='<div class="reviews-grid">'+reviews.map(r=>`
-    <div class="review-card"><div class="review-stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
-    <p class="review-text">"${r.text}"</p>
-    <div class="review-author"><div class="review-avatar">👤</div><div><div class="review-name">${r.name}</div><div class="review-product">${r.product||'The Art Nest'} · ${r.date}</div></div></div>
-    </div>`).join('')+'</div>';
+async function renderCustomerReviews(){
+  const list=document.getElementById('customer-reviews-list');if(!list)return;
+  try{
+    const {db,collection,getDocs,orderBy,query}=window._fb;
+    const snap=await getDocs(query(collection(db,'reviews'),orderBy('createdAt','desc')));
+    if(snap.empty){list.innerHTML='';return;}
+    const reviews=snap.docs.map(d=>({id:d.id,...d.data()}));
+    list.innerHTML='<div class="reviews-grid">'+reviews.map(r=>`
+      <div class="review-card"><div class="review-stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
+      <p class="review-text">"${r.text}"</p>
+      <div class="review-author"><div class="review-avatar">👤</div><div><div class="review-name">${r.name}</div><div class="review-product">${r.product||'The Art Nest'} · ${r.date}</div></div></div>
+      </div>`).join('')+'</div>';
+  }catch(e){list.innerHTML='';}
 }
 
 // ============ BACK TO TOP ============
