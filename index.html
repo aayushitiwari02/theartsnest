@@ -569,6 +569,7 @@
     <button class="admin-tab-btn" onclick="switchAdminTab('products')">🎨 Products</button>
     <button class="admin-tab-btn" onclick="switchAdminTab('customers')">👥 Customers</button>
     <button class="admin-tab-btn" onclick="switchAdminTab('offers')">🎉 Offers & Sales</button>
+    <button class="admin-tab-btn" onclick="switchAdminTab('categories')">🗂️ Categories</button>
     <button class="admin-tab-btn" onclick="openM('admin-change-pass-modal')">🔑 Change Password</button>
   </div>
   <!-- ORDERS -->
@@ -592,7 +593,7 @@
         <div class="form-group"><label>Product Name</label><input type="text" id="new-name" placeholder="e.g. Ocean Resin Tray"/></div>
         <div class="form-group"><label>Price (₹)</label><input type="text" id="new-price" placeholder="e.g. 899"/></div>
         <div class="form-group"><label>Category</label>
-          <select id="new-category"><option>Resin Art</option><option>Painting</option><option>Sketch</option><option>Knitting</option><option>Embroidery</option><option>DIY</option></select>
+          <select id="new-category"></select>
         </div>
         <div class="form-group"><label>Description</label><input type="text" id="new-desc" placeholder="Short description"/></div>
         <div class="form-group" style="grid-column:1/-1;"><label>Product Image</label>
@@ -611,6 +612,25 @@
     <div id="admin-customers-list"></div>
   </div>
   <!-- OFFERS & SALES -->
+  <div class="admin-tab-content" id="tab-categories">
+    <h3 style="font-family:'Playfair Display',serif;color:var(--dark-earth);margin-bottom:16px;">🗂️ Manage Categories</h3>
+    <div style="background:var(--warm-white);border:1px solid var(--sand);border-radius:10px;padding:20px;margin-bottom:20px;">
+      <p style="font-size:0.9rem;color:#7a6a50;margin-bottom:14px;">Add a new category with an emoji icon</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="margin:0;flex:1;min-width:140px;">
+          <label>Category Name</label>
+          <input type="text" id="new-cat-name" placeholder="e.g. Jewellery"/>
+        </div>
+        <div class="form-group" style="margin:0;width:80px;">
+          <label>Icon 🎨</label>
+          <input type="text" id="new-cat-icon" placeholder="💍" maxlength="4"/>
+        </div>
+        <button class="btn-primary" onclick="addCategory()" style="height:42px;">Add Category</button>
+      </div>
+    </div>
+    <div id="admin-categories-list"></div>
+  </div>
+
   <div class="admin-tab-content" id="tab-offers">
     <div style="margin-bottom:24px;">
       <p class="section-label">Manage discounts</p>
@@ -631,7 +651,7 @@
       <div class="form-group"><label>Product Name</label><input type="text" id="edit-name"/></div>
       <div class="form-group"><label>Price (₹)</label><input type="text" id="edit-price"/></div>
       <div class="form-group"><label>Category</label>
-        <select id="edit-category"><option>Resin Art</option><option>Painting</option><option>Sketch</option><option>Knitting</option><option>Embroidery</option><option>DIY</option></select>
+        <select id="edit-category"></select>
       </div>
       <div class="form-group"><label>Description</label><input type="text" id="edit-desc"/></div>
       <div class="form-group"><label>Update Image (optional)</label>
@@ -664,7 +684,86 @@ const RAZORPAY_KEY = 'rzp_live_Sm5T3EGaoBj5fR';
 // 2. Templates → Create Template → note the Template ID
 // 3. Account → API Keys → copy Public Key
 // 4. Replace YOUR_SERVICE_ID, YOUR_ORDER_TEMPLATE_ID, YOUR_CONTACT_TEMPLATE_ID, YOUR_PUBLIC_KEY below
-const CATEGORY_ICONS = {'Resin Art':'🪨','Painting':'🎨','Sketch':'✏️','Knitting':'🧶','Embroidery':'🌸','DIY':'🌿'};
+const DEFAULT_CATEGORY_ICONS = {'Resin Art':'🪨','Painting':'🎨','Sketch':'✏️','Knitting':'🧶','Embroidery':'🌸','DIY':'🌿'};
+let CATEGORY_ICONS = {...DEFAULT_CATEGORY_ICONS};
+let _allCategories = Object.keys(DEFAULT_CATEGORY_ICONS);
+
+// ============ CATEGORY MANAGEMENT ============
+async function loadCategoriesFromDB(){
+  try{
+    const {db,collection,getDocs}=window._fb;
+    const snap=await getDocs(collection(db,'categories'));
+    if(!snap.empty){
+      _allCategories=[];
+      CATEGORY_ICONS={};
+      snap.docs.forEach(d=>{
+        const data=d.data();
+        _allCategories.push(data.name);
+        CATEGORY_ICONS[data.name]=data.icon||'🎨';
+      });
+    }
+  }catch(e){
+    _allCategories=Object.keys(DEFAULT_CATEGORY_ICONS);
+    CATEGORY_ICONS={...DEFAULT_CATEGORY_ICONS};
+  }
+  populateCategoryDropdowns();
+  renderFilterBar();
+}
+
+function populateCategoryDropdowns(){
+  ['new-category','edit-category'].forEach(id=>{
+    const sel=document.getElementById(id);
+    if(!sel)return;
+    const current=sel.value;
+    sel.innerHTML=_allCategories.map(c=>`<option value="${c}"${c===current?' selected':''}>${CATEGORY_ICONS[c]||'🎨'} ${c}</option>`).join('');
+  });
+}
+
+function renderFilterBar(){
+  const bar=document.getElementById('filter-bar');
+  if(!bar)return;
+  bar.innerHTML=`<button class="filter-btn active" onclick="setFilter('All')">All</button>`+
+    _allCategories.map(c=>`<button class="filter-btn" onclick="setFilter('${c}')">${CATEGORY_ICONS[c]||'🎨'} ${c}</button>`).join('');
+}
+
+async function addCategory(){
+  const name=document.getElementById('new-cat-name').value.trim();
+  const icon=document.getElementById('new-cat-icon').value.trim()||'🎨';
+  if(!name){showToast('Please enter a category name!');return;}
+  if(_allCategories.includes(name)){showToast('Category already exists!');return;}
+  try{
+    const {db,collection,addDoc}=window._fb;
+    await addDoc(collection(db,'categories'),{name,icon});
+    document.getElementById('new-cat-name').value='';
+    document.getElementById('new-cat-icon').value='';
+    await loadCategoriesFromDB();
+    renderAdminCategories();
+    showToast(`Category "${name}" added! 🎨`);
+  }catch(e){showToast('Error adding category: '+e.message);}
+}
+
+async function deleteCategory(name){
+  if(!confirm(`Delete category "${name}"? Products in this category won't be affected.`))return;
+  try{
+    const {db,collection,getDocs,deleteDoc,doc,query,where}=window._fb;
+    const q=query(collection(db,'categories'),where('name','==',name));
+    const snap=await getDocs(q);
+    snap.docs.forEach(async d=>await deleteDoc(doc(db,'categories',d.id)));
+    await loadCategoriesFromDB();
+    renderAdminCategories();
+    showToast(`Category "${name}" deleted!`);
+  }catch(e){showToast('Error deleting category: '+e.message);}
+}
+
+function renderAdminCategories(){
+  const container=document.getElementById('admin-categories-list');
+  if(!container)return;
+  container.innerHTML=_allCategories.map(c=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--warm-white);border:1px solid var(--sand);border-radius:8px;padding:10px 16px;margin-bottom:8px;">
+      <span style="font-size:1.1rem;">${CATEGORY_ICONS[c]||'🎨'} <strong>${c}</strong></span>
+      <button onclick="deleteCategory('${c}')" class="btn-danger" style="padding:5px 12px;font-size:0.82rem;">Delete</button>
+    </div>`).join('');
+}
 
 const DEFAULT_PRODUCTS = [
   {id:'p1',name:'Ocean Resin Tray',price:'899',category:'Resin Art',desc:'Handpoured epoxy resin with blue & gold swirls. Perfect decorative piece.',image:'',soldOut:false},
@@ -980,7 +1079,10 @@ function filterProducts(){
   renderOffersBanner();
 }
 async function renderShop(){
-  if(window._fb){_cachedProducts=await loadProductsFromDB();}
+  if(window._fb){
+    await loadCategoriesFromDB();
+    _cachedProducts=await loadProductsFromDB();
+  }
   filterProducts();
 }
 
@@ -1110,7 +1212,8 @@ async function adminLogin(){
       document.getElementById('admin-pass').value='';
       document.getElementById('admin-pass-email').value='';
       showToast('Welcome Admin! 🎨');
-      renderAdminOrders();renderAdminMessages();renderAdminList();renderAdminCustomers();renderAdminOffers();
+      await loadCategoriesFromDB();
+      renderAdminOrders();renderAdminMessages();renderAdminList();renderAdminCustomers();renderAdminOffers();renderAdminCategories();
       document.getElementById('admin-panel').scrollIntoView({behavior:'smooth'});
     } else {
       await window._fb.signOut(window._fb.auth);
@@ -1154,10 +1257,11 @@ async function adminChangePassword(){
 }
 
 function switchAdminTab(tab){
-  const tabs=['orders','messages','products','customers','offers'];
+  const tabs=['orders','messages','products','customers','offers','categories'];
   document.querySelectorAll('.admin-tab-btn').forEach((b,i)=>b.classList.toggle('active',tabs[i]===tab));
   document.querySelectorAll('.admin-tab-content').forEach(c=>c.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
+  if(tab==='categories')renderAdminCategories();
 }
 
 async function renderAdminOrders(){
