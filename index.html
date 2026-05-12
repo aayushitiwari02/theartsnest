@@ -1278,7 +1278,12 @@ function switchAdminTab(tab){
   document.querySelectorAll('.admin-tab-btn').forEach((b,i)=>b.classList.toggle('active',tabs[i]===tab));
   document.querySelectorAll('.admin-tab-content').forEach(c=>c.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
-  if(tab==='categories')renderAdminCategories();
+  if(tab==='products')renderAdminList();
+  else if(tab==='offers')renderAdminOffers();
+  else if(tab==='categories')renderAdminCategories();
+  else if(tab==='orders')renderAdminOrders();
+  else if(tab==='messages')renderAdminMessages();
+  else if(tab==='customers')renderAdminCustomers();
 }
 
 async function renderAdminOrders(){
@@ -1376,7 +1381,8 @@ async function renderAdminCustomers(){
 }
 
 // ============ OFFERS & SALES ============
-function renderAdminOffers(){
+async function renderAdminOffers(){
+  if(window._fb){_cachedProducts=await loadProductsFromDB();}
   const products=loadProducts();
   const list=document.getElementById('admin-offers-list');
   list.innerHTML=products.map(p=>`
@@ -1407,10 +1413,13 @@ async function removeOffer(id){
 }
 
 // ============ PRODUCTS ============
-function renderAdminList(){
+async function renderAdminList(){
+  // Always fetch fresh from Firestore for admin
+  if(window._fb){_cachedProducts=await loadProductsFromDB();}
   const products=loadProducts();
   const container=document.getElementById('admin-products-list');
-  if(!products.length){container.innerHTML='<p style="color:#7a6a50;">No products yet.</p>';return;}
+  if(!container)return;
+  if(!products.length){container.innerHTML='<p style="color:#7a6a50;">No products yet. Add your first product above! 🎨</p>';return;}
   container.innerHTML=products.map(p=>`
     <div style="display:flex;align-items:center;gap:14px;background:var(--warm-white);border:1px solid var(--sand);border-radius:10px;padding:12px 16px;margin-bottom:10px;flex-wrap:wrap;">
       <div style="width:52px;height:52px;border-radius:8px;overflow:hidden;background:var(--sand);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
